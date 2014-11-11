@@ -21,16 +21,10 @@ obj-$(CONFIG_ATMEL_SMARTCONNECT) += atmel/  <-- Add this line
 obj-$(CONFIG_PRISM54)		+= prism54/  
 ```
 
-   * linux-at91/arch/arm/configs/sama5d3_xplained_defconfig  
-
 ##### Kernel Configuration
-Because user have to configure the Linux kernel according to hardware, input the following command.  
-
-    $ make ARCH=arm sama5d3_xplained_defconfig  
-    
 At this step, to include WILC1000 Driver, you have to modify default configuration using the “`menuconfig`” parameter.  
 
-    $ make ARCH=arm menuconfig
+    $ make menuconfig
     
 Choose the Atmel SmartConnect menu, “`Device Driver -> Network device support -> Wireless LAN -> Atmel SmartConnect Wireless cards Driver`”. The option WILC1000 driver can be set to either “`M`”or “`*`” as depicted in the below.  
 ![](https://github.com/atmchrispark/Image/blob/master/kernel_smartconnect.jpg)  
