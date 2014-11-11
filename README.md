@@ -33,9 +33,9 @@ Choose the Atmel SmartConnect menu, “`Device Driver -> Network device support 
    * Bus Type          : Can choose one of the two Interface SDIO SPI.  
    * Memory Allocation : Heap area shortage in the system may affect wifi operate.  
 Therefore, according to the resource status user can choose one of the three below.  
-      * When bootup system.
-      * When driver loading.
-      * Driver running fluidly.
+      * When bootup system.  
+      * When driver loading.  
+      * Driver running fluidly.  
    * Use out of band interrupt : If you would want to use an external interrupt instead of SDIO interrupt. Can select this option.  
    * Export defugfs for WILC1000 status : If you would want to know WILC1000 status.  
 
