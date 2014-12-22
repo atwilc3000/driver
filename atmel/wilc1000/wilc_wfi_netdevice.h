@@ -115,9 +115,11 @@ struct WILC_WFI_stats
  * linux_wlan_firmware_download() which blocks mac_open().
  */
 #if defined (NM73131_0_BOARD)
-#define RX_BH_TYPE  RX_BH_KTHREAD
-#else
-#define RX_BH_TYPE  RX_BH_THREADED_IRQ
+ #define RX_BH_TYPE  RX_BH_KTHREAD
+#elif defined (PANDA_BOARD)
+ #define RX_BH_TYPE  RX_BH_THREADED_IRQ
+#else 
+ #define RX_BH_TYPE  RX_BH_KTHREAD
 #endif
 
 struct wilc_wfi_key {

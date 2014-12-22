@@ -134,10 +134,18 @@ extern atomic_t DEBUG_LEVEL;
 	//RK30_PIN3_PD2
 	//RK2928_PIN1_PA7
 
+#elif defined(CUSTOMER_PLATFORM)
+/*
+ DOTO : specify MODALIAS name and GPIO number. This is certainly necessary for SPI interface.
+
+ex)
+#define MODALIAS  "WILC_SPI"
+#define GPIO_NUM  139
+*/
+
 #else
 	#define MODALIAS 	"WILC_SPI"
 	#define GPIO_NUM	139
-
 #endif
 	
 

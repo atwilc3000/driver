@@ -14,32 +14,18 @@
 #define SDIO_MODALIAS "wilc1000_sdio"
 #endif
 
-#ifdef WILC_ASIC_A0
 #if defined (NM73131_0_BOARD)
  #define MAX_SPEED 50000000
-#elif defined (PLAT_ALLWINNER_A10)
- #define MAX_SPEED 50000000/*15000000*/
-#elif defined (PLAT_ALLWINNER_A20)
- #define MAX_SPEED 45000000 //40000000 //50000000
-#elif defined (PLAT_ALLWINNER_A23)
- #define MAX_SPEED 45000000
-#elif defined (PLAT_ALLWINNER_A31)
- #define MAX_SPEED 45000000
-#elif defined (PLAT_PANDA_ES_OMAP4460)
- #define MAX_SPEED 25000000 //johnny change
-#elif defined(PLAT_WM8880)
- #define MAX_SPEED /*20000000*/50000000	/* tony increased to 50000000 */	
-#elif defined (PLAT_UBUNTU_X86)  // tony
- #define MAX_SPEED 25000000
-#elif defined (PLAT_RKXXXX)
-#define MAX_SPEED 50000000
+#elif defined(CUSTOMER_PLATFORM)
+/* TODO : User have to stable bus clock as user's environment. */
+ #ifdef MAX_BUS_SPEED
+ #define MAX_SPEED MAX_BUS_SPEED
+ #else
+ #define MAX_SPEED 50000000
+ #endif
 #else
-#define MAX_SPEED 30000000 //default 50000000
+ #define MAX_SPEED 30*1000000 //Max 50M
 #endif
-#else /* WILC_ASIC_A0 */
-/* Limit clk to 6MHz on FPGA. */
-#define MAX_SPEED 6000000
-#endif /* WILC_ASIC_A0 */
 
 
 struct sdio_func* local_sdio_func = NULL;
@@ -202,11 +188,6 @@ void disable_sdio_interrupt(void){
 
 static int linux_sdio_set_speed(int speed)
 {
-#if defined(PLAT_AML8726_M3) || defined (PLAT_ALLWINNER_A31)
-
-    PRINT_ER("@@@@@@@@@@@@[Skip] change SDIO speed to %d @@@@@@@@@\n", speed);
-
-#else
 	struct mmc_ios ios;
 	sdio_claim_host(local_sdio_func);
 	
@@ -216,7 +197,7 @@ static int linux_sdio_set_speed(int speed)
 	local_sdio_func->card->host->ops->set_ios(local_sdio_func->card->host,&ios);
 	sdio_release_host(local_sdio_func);
 	PRINT_ER("@@@@@@@@@@@@ change SDIO speed to %d @@@@@@@@@\n", speed);
-#endif
+
 	return 1;
 }
 
@@ -227,37 +208,22 @@ static int linux_sdio_get_speed(void)
 
 int linux_sdio_init(void* pv){
 
-#if defined(PLAT_AML8726_M3)
-//[[ rachel - copy from v.3.0 (by johnny)
- #ifdef WILC1000_SINGLE_TRANSFER
- #define WILC_SDIO_BLOCK_SIZE 256
- #else
- #define WILC_SDIO_BLOCK_SIZE 512
- #endif
+	/**
+		TODO : 
+	**/
 
-	int err;
-
-	sdio_claim_host(local_sdio_func);
-
-	printk("johnny linux_sdio_init %d\n", local_sdio_func->num );
-
-	local_sdio_func->num = 0;
-	sdio_set_block_size(local_sdio_func, WILC_SDIO_BLOCK_SIZE);
-	
-	local_sdio_func->num = 1;
-	sdio_enable_func(local_sdio_func);
-	sdio_set_block_size(local_sdio_func, WILC_SDIO_BLOCK_SIZE);
-	
-	sdio_release_host(local_sdio_func);
-
-	printk("johnny linux_sdio_init\n");
-#endif
 
 	sdio_default_speed = linux_sdio_get_speed();
 	return 1;
 }
 
 void linux_sdio_deinit(void *pv){
+
+	/**
+		TODO : 
+	**/
+
+
 	sdio_unregister_driver(&wilc_bus);
 }
 

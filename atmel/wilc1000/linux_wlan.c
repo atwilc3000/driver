@@ -15,9 +15,8 @@
 #include <linux/workqueue.h>
 #include <linux/interrupt.h>
 #include <linux/irq.h>
-#ifndef PLAT_ALLWINNER_A10	// tony
 #include <asm/gpio.h>
-#endif
+
 #include <linux/kthread.h>
 #include <linux/firmware.h>
 #include <linux/delay.h>
@@ -46,9 +45,6 @@
 #endif
 
 #include "svnrevision.h"
-#ifdef FW_VERSION_VERIFICATION
-#include "verify_fw_version.c"
-#endif
 
 #ifdef STATIC_MACADDRESS//brandy_0724 [[
 #include <linux/vmalloc.h>
@@ -57,117 +53,17 @@ struct task_struct* wilc_mac_thread;
 unsigned char mac_add[] = {0x00, 0x80, 0xC2, 0x5E, 0xa2, 0xb2};
 #endif //brandy_0724 ]]
 
-#if defined(PLAT_AML8726_M3)
- #include <mach/gpio.h>
- #include <mach/gpio_data.h>
- #include <mach/pinmux.h>
-
- extern void extern_wifi_set_enable(int is_on);
- extern void sdio_reinit(void);
-
- #define _linux_wlan_device_power_on()          extern_wifi_set_enable(1)
- #define _linux_wlan_device_power_off()         extern_wifi_set_enable(0)
-
- #define _linux_wlan_device_detection()         sdio_reinit()
- #define _linux_wlan_device_removal()       ;
-
- static int _available_irq_ready = 0; //[[ johnny : because of dummy irq
-
-#elif defined(PLAT_ALLWINNER_A10)
- extern void mmc_pm_power(int mode, int* updown);
- extern void sunximmc_rescan_card(unsigned id, unsigned insert);
- extern int mmc_pm_get_io_val(char* name);
- extern int mmc_pm_gpio_ctrl(char* name, int level);
-
- #define WILC1000_SDIO_CARD_ID	0
- int wilc1000_power_val = 0;
-
- #define _linux_wlan_device_power_on()          { wilc1000_power_val = 1; mmc_pm_power(WILC1000_SDIO_CARD_ID,&wilc1000_power_val); }
- #define _linux_wlan_device_power_off()         { wilc1000_power_val = 0; mmc_pm_power(WILC1000_SDIO_CARD_ID,&wilc1000_power_val); }
-
- #define _linux_wlan_device_detection()         sw_mci_rescan_card(WILC1000_SDIO_CARD_ID,1)
- #define _linux_wlan_device_removal()           sw_mci_rescan_card(WILC1000_SDIO_CARD_ID,0)
-#elif defined(PLAT_ALLWINNER_A20)
- extern void sw_mci_rescan_card(unsigned id, unsigned insert);
- extern void wifi_pm_power(int on);	// tony to keep allwinner's rule
- #define WILC1000_SDIO_CARD_ID	3
-
- #define _linux_wlan_device_power_on()          wifi_pm_power(1)
- #define _linux_wlan_device_power_off()         wifi_pm_power(0)
-
- #define _linux_wlan_device_detection()         sw_mci_rescan_card(WILC1000_SDIO_CARD_ID,1)
- #define _linux_wlan_device_removal()           sw_mci_rescan_card(WILC1000_SDIO_CARD_ID,0)
- 
-#elif defined(PLAT_ALLWINNER_A23)
- extern void sunxi_mci_rescan_card(unsigned id, unsigned insert);
- extern void wifi_pm_power(int on);
- #define WILC1000_SDIO_CARD_ID	1
-
- #define _linux_wlan_device_power_on()          wifi_pm_power(1)
- #define _linux_wlan_device_power_off()         wifi_pm_power(0)
-
- #define _linux_wlan_device_detection()         sunxi_mci_rescan_card(WILC1000_SDIO_CARD_ID,1)
- #define _linux_wlan_device_removal()           sunxi_mci_rescan_card(WILC1000_SDIO_CARD_ID,0)
-
-#elif defined(PLAT_ALLWINNER_A31)
- extern void sw_mci_rescan_card(unsigned id, unsigned insert);
- extern void wifi_pm_power(int on);
- #define WILC1000_SDIO_CARD_ID	1
-
- #define _linux_wlan_device_power_on()          wifi_pm_power(1)
- #define _linux_wlan_device_power_off()         wifi_pm_power(0)
-
- #define _linux_wlan_device_detection()         sw_mci_rescan_card(WILC1000_SDIO_CARD_ID,1)
- #define _linux_wlan_device_removal()           sw_mci_rescan_card(WILC1000_SDIO_CARD_ID,0)
- 
-#elif defined(PLAT_WMS8304)		// added by rachel
- #include "wilc_custom_gpio.c"
-
- #define _linux_wlan_device_power_on()          WilcWifiCardPower(1)
- #define _linux_wlan_device_power_off()         WilcWifiCardPower(0)
-
-#elif defined(PLAT_WM8880)
- #include "wilc_wm8880_gpio.c"
-
- #include <linux/wireless.h> 	// simon, rachel
- #include <mach/irqs.h>
- #include <linux/mmc/sdio.h>
- #include <mach/hardware.h>
- #include <asm/io.h>
- #include <asm/irq.h>
-
- /*simulate virtual sdio card insert and removal*/
- extern void force_remove_sdio2(void);
- extern void wmt_detect_sdio2(void);
- int wmt_wilc1000_intr_num=15; //gpio 15
-
- #define _linux_wlan_device_power_on()          WilcWifiCardPower(1)
- #define _linux_wlan_device_power_off()         WilcWifiCardPower(0)
-
- #define _linux_wlan_device_detection()         wmt_detect_sdio2()
- #define _linux_wlan_device_removal()           force_remove_sdio2()
-
-#elif defined(PLAT_RKXXXX)		
-extern int rk29sdk_wifi_power(int on);
-extern int rk29sdk_wifi_set_carddetect(int val); 
-#define _linux_wlan_device_power_on()          rk29sdk_wifi_power(1)
-#define _linux_wlan_device_power_off()         rk29sdk_wifi_power(0)
-#define _linux_wlan_device_detection()         rk29sdk_wifi_set_carddetect(1)
-#define _linux_wlan_device_removal()           rk29sdk_wifi_set_carddetect(0)
-
-#elif defined(PLAT_CLM9722)
-#define _linux_wlan_device_power_on()          {}
-#define _linux_wlan_device_power_off()         {}
-
-#define _linux_wlan_device_detection()         {}
-#define _linux_wlan_device_removal()           {}
-
+#if defined(CUSTOMER_PLATFORM)
+/*
+ DOTO : Write power control functions as customer platform.
+*/
 #else
- #define _linux_wlan_device_detection() 	{}
- #define _linux_wlan_device_removal()		{}
+
  #define _linux_wlan_device_power_on()		{}
  #define _linux_wlan_device_power_off()		{} 
 
+ #define _linux_wlan_device_detection() 	{}
+ #define _linux_wlan_device_removal()		{}
 #endif
 
 #ifdef DISABLE_PWRSAVE_AND_SCAN_DURING_IP
@@ -228,7 +124,7 @@ static struct notifier_block g_dev_notifier = {
 								if(g_linux_wlan->oup.wlan_cleanup != NULL) \
 								        	g_linux_wlan->oup.wlan_cleanup()
 
-//[[ johnny : enable to selecte bin file on Makefile
+
 #ifndef STA_FIRMWARE
 #define STA_FIRMWARE	"wifi_firmware.bin"
 #endif
@@ -240,15 +136,14 @@ static struct notifier_block g_dev_notifier = {
 #ifndef P2P_CONCURRENCY_FIRMWARE
 #define P2P_CONCURRENCY_FIRMWARE	"wifi_firmware_p2p_concurrency.bin"
 #endif
-//]]
 
-// [[ added by tony
+
+
 typedef struct android_wifi_priv_cmd {
 	char *buf;
 	int used_len;
 	int total_len;
 } android_wifi_priv_cmd;
-// ]] for wpa supplicant iw
 
 
 #define IRQ_WAIT	1
@@ -518,99 +413,34 @@ static int dev_state_ev_handler(struct notifier_block *this, unsigned long event
 void linux_wlan_enable_irq(void){
 
 #if (RX_BH_TYPE != RX_BH_THREADED_IRQ)
-#if (!defined WILC_SDIO) || (defined WILC_SDIO_IRQ_GPIO)
+#if (defined WILC_SPI) || (defined WILC_SDIO_IRQ_GPIO)
 	PRINT_D(INT_DBG,"Enabling IRQ ...\n");
-
- #if defined(PLAT_WMS8304)		// added by rachel
-	//enable_irq(nic->dev_irq_num);
-	/*clean corresponding int status bit, or it will generate int continuously for ever*/	
-	gpio_clean_irq_status_any(&gpio_irq_ctrl);
-
 	enable_irq(g_linux_wlan->dev_irq_num);
-	
-	/*we should reopen this gpio pin int in order to capture the future/comming interruption*/	
-	enable_gpio_int_any(&gpio_irq_ctrl, INT_EN);
- #elif defined(PLAT_WM8880)
-
-	wmt_gpio_ack_irq(wmt_wilc1000_intr_num);
-	wmt_gpio_unmask_irq(wmt_wilc1000_intr_num);
-
- #else
-	enable_irq(g_linux_wlan->dev_irq_num);
- #endif
-	
 #endif
 #endif
 }
 
 void linux_wlan_disable_irq(int wait){
-#if (!defined WILC_SDIO) || (defined WILC_SDIO_IRQ_GPIO)
+#if (defined WILC_SPI) || (defined WILC_SDIO_IRQ_GPIO)
 	if(wait) {
 		PRINT_D(INT_DBG,"Disabling IRQ ...\n");
- #if defined(PLAT_WM8880)
-		wmt_gpio_mask_irq(wmt_wilc1000_intr_num);
- #else
 		disable_irq(g_linux_wlan->dev_irq_num);
- #endif
 	} else {
 		PRINT_D(INT_DBG,"Disabling IRQ ...\n");
- #if defined(PLAT_WM8880)
-		wmt_gpio_mask_irq(wmt_wilc1000_intr_num);
- #else
 		disable_irq_nosync(g_linux_wlan->dev_irq_num);
- #endif
 	}
 #endif
 }
-#if (!defined WILC_SDIO) || (defined WILC_SDIO_IRQ_GPIO)
+
+#if (defined WILC_SPI) || (defined WILC_SDIO_IRQ_GPIO)
 static irqreturn_t isr_uh_routine(int irq, void* user_data){
 
-#if defined(PLAT_WMS8304)
-	int pin_state;
-	//printk("isr_uh_routine\n");
-	/*if this gpio pin int is not enable or int status bit is not toggled, it is not our interruption*/
-	if(!gpio_irq_isEnable_any(&gpio_irq_ctrl) || !gpio_irq_state_any(&gpio_irq_ctrl))
-		return IRQ_NONE;
-
-	/*be here, be sure that this int is myself, but we should disable int before handler this interruption*/	
-	enable_gpio_int_any(&gpio_irq_ctrl, INT_DIS);
-
-	/*get value on gpin int pin*/	
-	pin_state = gpio_get_value_any(&gpio_irq_ctrl);
-
-	if(pin_state == 0) {		
- 		//printk("wlan int\n");
-		//dont_deinit_irq = 0;
-	}
-	else 
-	{
-		//printk("this is fake interruption!!\n");
-		enable_gpio_int_any(&gpio_irq_ctrl, INT_EN);
-		return IRQ_HANDLED;
-	}
-#elif defined(PLAT_WM8880)
-
-	if(!is_gpio_irqenable(wmt_wilc1000_intr_num) || !gpio_irqstatus(wmt_wilc1000_intr_num))
-		return IRQ_NONE;	
-
-	wmt_gpio_mask_irq(wmt_wilc1000_intr_num);
-	
-#endif
 
 	int_rcvdU++;
-	PRINT_D(INT_DBG,"Interrupt received UH\n");
 #if (RX_BH_TYPE != RX_BH_THREADED_IRQ)
 	linux_wlan_disable_irq(IRQ_NO_WAIT);
 #endif
-
-#if defined(PLAT_AML8726_M3)//[[ johnny : because of dummy irq
-  if ( _available_irq_ready == 0 )
-  {
-    linux_wlan_enable_irq();
-    PRINT_D(GENERIC_DBG,"johnny test : recevied dummy irq\n");
-    return IRQ_HANDLED;
-  }
-#endif//]]
+	PRINT_D(INT_DBG,"Interrupt received UH\n");
 
     /*While mac is closing cacncel the handling of any interrupts received*/
 	if(g_linux_wlan->close)
@@ -705,85 +535,29 @@ static int isr_bh_routine(void *vp)
 #endif
 
 
-#if (!defined WILC_SDIO) || (defined WILC_SDIO_IRQ_GPIO)
+#if (defined WILC_SPI) || (defined WILC_SDIO_IRQ_GPIO)
 static int init_irq(linux_wlan_t* p_nic){
 	int ret = 0;
 	linux_wlan_t *nic = p_nic;
-	
-#if defined(PLAT_AML8726_M3) //johnny add
-	nic->dev_irq_num = INT_GPIO_4; // <== skyworth //'100' value for onda vi30 platform
 
-	ret = request_irq(nic->dev_irq_num, isr_uh_routine, IORESOURCE_IRQ | IORESOURCE_IRQ_SHAREABLE,
-		"WILC_IRQ", nic);
-
-	if (ret < 0) {
-		PRINT_ER("Failed to request IRQ for GPIO: %d\n",nic->dev_irq_num);
-	}
-
-#elif defined (PLAT_WMS8304) //simon
-	//system("rmmod /system/modules/3.0.8-default/kpad.ko");
-	irq_gpio_init();
-	nic->dev_irq_num = IRQ_GPIO; //(5) gpio_irq_ctrl;
-	printk("%s\n",__FUNCTION__);
-	ret = request_irq(nic->dev_irq_num, isr_uh_routine, IRQF_SHARED,
-		"WILC_IRQ", nic);
-
-	if (ret < 0) {
-		PRINT_ER("Failed to request IRQ for GPIO: %d\n",nic->dev_irq_num);
-	}
-
-	enable_gpio_int_any(&gpio_irq_ctrl,INT_EN);
-
-#elif defined(PLAT_WM8880)
-
-	printk("%s\n",__FUNCTION__);
-	wmt_gpio_setpull(wmt_wilc1000_intr_num,WMT_GPIO_PULL_UP);
-	wmt_gpio_mask_irq(wmt_wilc1000_intr_num);
-	wmt_gpio_ack_irq(wmt_wilc1000_intr_num);
-
-
-	nic->dev_irq_num = IRQ_GPIO;
-	ret = request_irq(nic->dev_irq_num, isr_uh_routine, IRQF_SHARED,
-		"WILC_IRQ", nic);
-
-	if (ret < 0) {
-		PRINT_ER("Failed to request IRQ for GPIO: %d\n",nic->dev_irq_num);
-	}
-
-	/*clear int status register before enable this int pin*/
-	wmt_gpio_ack_irq(wmt_wilc1000_intr_num);
-	/*enable this int pin*/
-	wmt_gpio_unmask_irq(wmt_wilc1000_intr_num);
-
-#elif defined (PLAT_RKXXXX)
-	if ((gpio_request(GPIO_NUM, "WILC_INTR") == 0) &&
-		(gpio_direction_input(GPIO_NUM) == 0)) {
-		
-		nic->dev_irq_num = gpio_to_irq(GPIO_NUM);
-		ret = request_irq(nic->dev_irq_num, isr_uh_routine, IRQF_TRIGGER_LOW,
-			"WILC_IRQ", nic);
-		PRINT_ER("********%s() IRQ_GPIO, %s\n", __func__, __DATE__);
-		if (ret < 0) {
-			PRINT_ER("Failed to request IRQ for GPIO: %d\n",nic->dev_irq_num);
-		}
-
-	} else {
-		ret = -1;
-		PRINT_ER("could not obtain gpio for WILC_INTR\n");
-	}
-
-
-#else
 		/*initialize GPIO and register IRQ num*/						
 		/*GPIO request*/
 		if ((gpio_request(GPIO_NUM, "WILC_INTR") == 0) &&
 		    (gpio_direction_input(GPIO_NUM) == 0)) {
-#if defined (NM73131_0_BOARD)
-			g_linux_wlan->dev_irq_num = IRQ_WILC1000;
-#else
+#if defined(CUSTOMER_PLATFORM)
+/*
+ DOTO : save the registerd irq number to the private wlic context in kernel.
+
+  ex) nic->dev_irq_num = gpio_to_irq(GPIO_NUM);
+*/
+#elif defined (NM73131_0_BOARD)
+			nic->dev_irq_num = IRQ_WILC1000;
+#elif defined (PANDA_BOARD)
 			gpio_export(GPIO_NUM, 1);
 			nic->dev_irq_num = OMAP_GPIO_IRQ(GPIO_NUM);
 			irq_set_irq_type(nic->dev_irq_num, IRQ_TYPE_LEVEL_LOW);
+#else
+			nic->dev_irq_num = gpio_to_irq(GPIO_NUM);
 #endif
 		} else {
 			ret = -1;
@@ -792,7 +566,7 @@ static int init_irq(linux_wlan_t* p_nic){
 
 
 #if (RX_BH_TYPE == RX_BH_THREADED_IRQ)
-		if( (ret != -1) && ( request_threaded_irq(g_linux_wlan->dev_irq_num, isr_uh_routine, isr_bh_routine,
+		if( (ret != -1) && ( request_threaded_irq(nic->dev_irq_num, isr_uh_routine, isr_bh_routine,
 				  				IRQF_TRIGGER_LOW | IRQF_ONESHOT, /*Without IRQF_ONESHOT the uh will remain kicked in and dont gave a chance to bh*/
 				   				"WILC_IRQ", nic))<0){
 
@@ -807,30 +581,20 @@ static int init_irq(linux_wlan_t* p_nic){
 		}else{			
 
 				PRINT_D(INIT_DBG,"IRQ request succeeded IRQ-NUM= %d on GPIO: %d\n",
-				g_linux_wlan->dev_irq_num,GPIO_NUM);			
+				nic->dev_irq_num,GPIO_NUM);			
 		}
 
-#endif
-	
 	return ret;
 }
 #endif
 
 static void deinit_irq(linux_wlan_t* nic){
-#if (!defined WILC_SDIO) || (defined WILC_SDIO_IRQ_GPIO)
+#if (defined WILC_SPI) || (defined WILC_SDIO_IRQ_GPIO)
 		/* Deintialize IRQ */
-		if(&g_linux_wlan->dev_irq_num != 0){
-		  free_irq(g_linux_wlan->dev_irq_num, g_linux_wlan);
- #if defined(PLAT_AML8726_M3) //johnny
+		if(&nic->dev_irq_num != 0){
+		  free_irq(nic->dev_irq_num, g_linux_wlan);
 
- #elif defined (PLAT_WMS8304)
-		  irq_gpio_deinit();
-
- #elif defined(PLAT_WM8880)
-		/* austin-0720: johnny, let me know why this is empty */
- #else
 		  gpio_free(GPIO_NUM);
- #endif
 		}
 #endif
 }
@@ -1333,17 +1097,13 @@ static int linux_wlan_start_firmware(perInterface_wlan_t* nic){
 		PRINT_ER("Failed to start Firmware\n");
 		goto _fail_;
 	}
-#if defined(PLAT_AML8726_M3)//[[ johnny : because of dummy irq
-	_available_irq_ready = 1;
-#endif
 
 	/* wait for mac ready */
 	PRINT_D(INIT_DBG,"Waiting for Firmware to get ready ...\n");
 	if( (ret = linux_wlan_lock_timeout(&g_linux_wlan->sync_event,5000)) )
 	{
 #ifdef COMPLEMENT_BOOT
- #if defined(PLAT_ALLWINNER_A20) || defined(PLAT_ALLWINNER_A23) || defined(PLAT_ALLWINNER_A31)
- 
+
 		if(timeout--)
 		{
 			printk("repeat power cycle[%d]",timeout);
@@ -1355,7 +1115,6 @@ static int linux_wlan_start_firmware(perInterface_wlan_t* nic){
 			ret = -1;
 			goto _fail_;
 		}
- #endif
 #endif
 		PRINT_D(INIT_DBG,"Firmware start timed out");
 		goto _fail_;
@@ -2090,11 +1849,9 @@ uint8_t wilc1000_prepare_11b_core(wilc_wlan_inp_t *nwi,	wilc_wlan_oup_t *nwo,lin
 			sdio_unregister_driver(&wilc_bus);
 
             linux_wlan_device_detection(0);
-//[[ 0422 Block            linux_wlan_device_power(0);
 
 			mdelay(100);
 
-//[[ 0422 Block            linux_wlan_device_power(1);
             linux_wlan_device_detection(1);
 
 			sdio_register_driver(&wilc_bus);
@@ -2183,9 +1940,7 @@ int wilc1000_wlan_init(struct net_device *dev,perInterface_wlan_t* p_nic)
 		g_linux_wlan->mac_status = WILC_MAC_STATUS_INIT;	
 		g_linux_wlan->close = 0;
 		g_linux_wlan->wilc1000_initialized = 0;
-#if defined(PLAT_AML8726_M3)
-		_available_irq_ready = 0;
-#endif
+
 		wlan_init_locks(g_linux_wlan);
 
 #ifdef STATIC_MACADDRESS
@@ -2295,7 +2050,9 @@ int wilc1000_wlan_init(struct net_device *dev,perInterface_wlan_t* p_nic)
 	}
 
 	_fail_irq_enable_:
+#if (defined WILC_SDIO) && (!defined WILC_SDIO_IRQ_GPIO)
 		disable_sdio_interrupt();
+#endif
 	_fail_irq_init_:
 #if (!defined WILC_SDIO) || (defined WILC_SDIO_IRQ_GPIO)
 		deinit_irq(g_linux_wlan);
@@ -3067,8 +2824,10 @@ int wilc_netdev_init(void){
 			/*Register WiFi*/
 			wdev = WILC_WFI_WiphyRegister(ndev);
 			
+			#ifdef WILC_SDIO
 		    /* set netdev, tony */
 		    SET_NETDEV_DEV(ndev, &local_sdio_func->dev);
+			#endif
 			
 			if(wdev == NULL){
 			PRINT_ER("Can't register WILC Wiphy\n");

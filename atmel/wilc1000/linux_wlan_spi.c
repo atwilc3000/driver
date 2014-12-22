@@ -14,20 +14,28 @@
 #define USE_SPI_DMA     0	//johnny add
 
 #ifdef WILC_ASIC_A0
-#if defined(PLAT_PANDA_ES_OMAP4460)
-#define MIN_SPEED 12000000
-#define MAX_SPEED 24000000
-#elif defined(PLAT_WMS8304)
-#define MIN_SPEED 12000000
-#define MAX_SPEED 24000000 //4000000
-#else
-#define MIN_SPEED 24000000
-#define MAX_SPEED 48000000
-#endif
+ #if defined(PLAT_PANDA_ES_OMAP4460)
+  #define MIN_SPEED 12000000
+  #define MAX_SPEED 24000000
+ #elif defined(PLAT_WMS8304)
+  #define MIN_SPEED 12000000
+  #define MAX_SPEED 24000000 //4000000
+ #elif defined(CUSTOMER_PLATFORM)
+ /*
+  DOTO : define Clock speed under 48M.
+ 
+ ex)
+  #define MIN_SPEED 24000000
+  #define MAX_SPEED 48000000
+ */
+ #else
+  #define MIN_SPEED 24000000
+  #define MAX_SPEED 48000000
+ #endif
 #else /* WILC_ASIC_A0 */
 /* Limit clk to 6MHz on FPGA. */
-#define MIN_SPEED 6000000
-#define MAX_SPEED 6000000 
+ #define MIN_SPEED 6000000
+ #define MAX_SPEED 6000000 
 #endif /* WILC_ASIC_A0 */
 
 static uint32_t SPEED = MIN_SPEED;
@@ -44,7 +52,7 @@ static int __init wilc_bus_probe(struct spi_device* spi){
 	return 0;
 }
 
-static int __devexit wilc_bus_remove(struct spi_device* spi){
+static int __exit wilc_bus_remove(struct spi_device* spi){
 	
 		//linux_spi_deinit(NULL);
 	
@@ -57,7 +65,7 @@ struct spi_driver wilc_bus __refdata = {
 				.name = MODALIAS,
 		},
 		.probe =  wilc_bus_probe,
-		.remove = __devexit_p(wilc_bus_remove),
+		.remove = __exit_p(wilc_bus_remove),
 };
 
 
