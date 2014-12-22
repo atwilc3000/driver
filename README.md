@@ -114,6 +114,6 @@ CONFIG_WILC1000_SPI=y
       
       Check and modify it like below  
       
-      - define gpio number (GPIO_NUM) which is physically mapped with WILC1000 in file `linux_wlan_common.h`  
-      - save the registerd irq number to the private wlic context in function `init_irq" of file "linux_wlan.c`  
+      - define gpio number (GPIO_NUM) which is physically mapped with WILC1000 in file `linux_wlan_common.h`.
+      - save the registerd irq number to the private wlic context in function `init_irq" of file "linux_wlan.c`.  Fix and add  'linux_wlan_enable_irq' and 'linux_wlan_disable_irq' in same file according to user platform.
       
