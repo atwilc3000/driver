@@ -66,15 +66,15 @@ CONFIG_WILC1000_SPI=y
 
 
    * **SDIO**  
-      : The SDIO WILC1000 related protocol is implemented in the file `wilc1000/wilc_sdio.c` while the linux related SDIO API is implemented in the file `wilc1000/linux_wlan_sdio.c`  
+      : The SDIO WILC1000 related protocol is implemented in the file "`wilc_sdio.c`" while the linux related SDIO API is implemented in the file "`linux_wlan_sdio.c`".  
   
-      When wifi drvier is loaded and unload on kernel, if user want to add special commands, write it in linux_sdio_init and linux_sdio_deinit function of file `linux_wlan_sdio.c`  
+      When wifi drvier is loaded and unload on kernel, if user want to add special commands, write it in linux_sdio_init and linux_sdio_deinit function of file "`linux_wlan_sdio.c`"  
 
    * **SPI**  
       1. Registering SPI driver  
-         The SPI NMI related protocol is implemented in the file `src/driver/nmi_spi.c` while the linux related SPI API is implemented in the file `src/diver/linux/source/linux_wlan_spi.c`  
+         The SPI NMI related protocol is implemented in the file "`wilc_spi.c`" while the linux related SPI API is implemented in the file "`linux_wlan_spi.c`".
 
-         When the module is inserted, the module calls the function `linux_spi_init` which in turn calls the function `spi_register_driver(&wilc_bus);`  
+         When the module is inserted, the module calls the function "`linux_spi_init`" which in turn calls the function "`spi_register_driver(&wilc_bus);`"
          
          Where the wilc_bus is defined as follow
       ```  
@@ -87,13 +87,13 @@ CONFIG_WILC1000_SPI=y
       };  
       ```  
 	 The only thing that needs to be changed is the definition of the MODALIAS, it should changed to match the target platform name.  
-         This value is defined at the file `src/driver/include/Linux_wlan_common.h`   
+         This value is defined at the file "`linux_wlan_common.h`".
   
       2. Setting SPI Clock  
          SPI clock can be changed to improve the communication with host processor during working.  
          So `MIN_SPEED` and `MAX_SPEED` value have to defined depand on the clock which platform support.  
       
-         look at it in `linux_wlan_spi.c` file  
+         look at it in "`linux_wlan_spi.c`" file  
       
          ```
             #elif defined(CUSTOMER_PLATFORM)
@@ -110,10 +110,10 @@ CONFIG_WILC1000_SPI=y
       
       When WILC1000 has SPI interface, External Pin Interrupt has to be used to transfer the data to host processor.  
       
-      When the module initialized it registers a GPIO (in case of SPI or SDIO with external interrupt) to act as an interrupt, the driver uses the definition GPIO_NUM, this definition should be defined in the file `linux_wlan_common.h`  
-      
+      When the module initialized it registers a GPIO (in case of SPI or SDIO with external interrupt) to act as an interrupt, the driver uses the definition GPIO_NUM, this definition should be defined in the file "`linux_wlan_common.h`".
+
       Check and modify it like below  
       
-      - define gpio number (GPIO_NUM) which is physically mapped with WILC1000 in file `linux_wlan_common.h`.
-      - save the registerd irq number to the private wlic context in function `init_irq" of file "linux_wlan.c`.  Fix and add  'linux_wlan_enable_irq' and 'linux_wlan_disable_irq' in same file according to user platform.
+      - define gpio number (GPIO_NUM) which is physically mapped with WILC1000 in file "`linux_wlan_common.h`".
+      - save the registerd irq number to the private wlic context in function `init_irq` of file "`linux_wlan.c`".  Fix and add  `linux_wlan_enable_irq` and `linux_wlan_disable_irq` in same file according to user platform.
       
