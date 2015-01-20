@@ -677,7 +677,7 @@ static void linux_wlan_lock(void* vp)
 	PRINT_D(LOCK_DBG,"Locking %p\n",vp);
 	if(vp != NULL)
 	{		
-		down((struct semaphore*)vp);
+		while(down_interruptible((struct semaphore*)vp));
 	}
 	else
 	{

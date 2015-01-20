@@ -35,7 +35,8 @@ WILC_ErrNo WILC_SemaphoreAcquire(WILC_SemaphoreHandle* pHandle,
 	WILC_ErrNo s32RetStatus = WILC_SUCCESS;
 
 	#ifndef CONFIG_WILC_SEMAPHORE_TIMEOUT
-	down(pHandle);
+
+	while(down_interruptible(pHandle));
 
 	#else
 	if(pstrAttrs == WILC_NULL)
