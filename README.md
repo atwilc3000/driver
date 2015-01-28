@@ -1,4 +1,9 @@
-##### 1. Including WILC1000 driver source in kernel tree.  
+Atmel SmartConnect Wi-Fi is a family of self-contained, low power and certified modules bringing wireless internet connectivity. 
+
+**ATWILC1000** is IEEE802.11 b/g/n IOT link controller SoC, which is ideal add-on to existing MCU solutions bringing Wi-Fi via SPI, SDIO or UART.
+
+**ATWILC3000** is IEEE 802.11 b/g/n with Bluetooth 4.0 IOT link controller utilizing highly optimized 802.11-Bluetooth coexistence protocols and provides multiple peripheral interfaces like UART, SPI, I2C and SDIO. 
+
 Overwrite onto the linux-at91 kernel directory already we have.  
 > * In the Linux Wireless driver directory, “`/driver/net/wireless`” directory,  
 >          WILC1000 Linux driver are newly added as “`atmel`” directory. 
