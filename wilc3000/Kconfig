@@ -1,0 +1,36 @@
+config WILC3000
+	tristate "WILC3000 support (WiFi & Bluetooth coexistence)"
+    depends on ATMEL_SMARTCONNECT && BT
+	---help---
+		This module supports Atmel IEEE 802.11n WiFi and Bluetooth dual chip.
+
+choice
+    prompt "Bus Type"
+    depends on WILC3000 
+    default WILC3000_SDIO
+    
+	config WILC3000_SDIO
+	    bool "SDIO support"
+	    depends on MMC
+		---help---
+			This module adds support for the SDIO interface of adapters using
+			WILC chipset. Select this if your platform is using the SDIO bus. 
+
+	config WILC3000_SPI
+	    bool "SPI support"
+		---help---
+			This module adds support for the SPI interface of adapters using
+			WILC chipset. Select this if your platform is using the SPI bus. 
+endchoice
+
+
+
+
+config WILC3000_HW_OOB_INTR
+    bool "Use out of band interrupt"
+    depends on WILC3000 && WILC3000_SDIO
+    default n
+    ---help---
+		If your platform don't recognize SDIO IRQ, connect chipset external IRQ pin and check this option.
+		Or, Use this to get all interrupts including SDIO interrupts.
+
