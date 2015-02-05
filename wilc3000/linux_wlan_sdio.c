@@ -19,8 +19,10 @@
 #define MAX_SPEED 50000000
 #elif defined (PLAT_ALLWINNER_A20)
 #define MAX_SPEED 45000000 //40000000 //50000000
+#elif defined (PLAT_ALLWINNER_A31)
+#define MAX_SPEED 50000000
 #else
-#define MAX_SPEED 25000000 //50000000 //johnny : go down as jumped wire
+#define MAX_SPEED 50000000
 #endif
 #else /* WILC_ASIC_A0 */
 /* Limit clk to 6MHz on FPGA. */
@@ -29,6 +31,10 @@
 
 
 struct sdio_func* local_sdio_func = NULL;
+
+extern struct semaphore sdio_probe_sync;
+extern void linux_wlan_unlock(void* vp);
+
 extern linux_wlan_t* g_linux_wlan;
 extern int wilc_netdev_init(void);
 extern int sdio_clear_int(void);
@@ -142,14 +148,15 @@ static int linux_sdio_probe(struct sdio_func *func, const struct sdio_device_id 
 	{		
 		local_sdio_func = func;
 		probe = 1;
+
+		linux_wlan_unlock(&sdio_probe_sync);	
+		
 		return 0;
 	}
-	PRINT_D(INIT_DBG,"Initializing netdev\n");
 	local_sdio_func = func;
-	if(wilc_netdev_init()){
-		PRINT_ER("Couldn't initialize netdev\n");
-		return -1;
-	}
+
+	linux_wlan_unlock(&sdio_probe_sync);
+	
 	return 0;
 }
 

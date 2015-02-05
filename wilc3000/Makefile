@@ -1,99 +1,61 @@
-MODULE_NAME = wilc3000
+obj-$(CONFIG_WILC3000) += wilc3000.o 
 
-WILC3000_STA_FW_VERSION = STA_FIRMWARE=\"wilc3000_fw.bin\"
-WILC3000_AP_FW_VERSION = AP_FIRMWARE=\"wilc3000_ap_fw.bin\"
-WILC3000_P2P_FIRMWARE = P2P_CONCURRENCY_FIRMWARE=\"wilc3000_p2p_fw.bin\"
-WILC3000_BT_FIRMWARE = BT_FIRMWARE=\"bt_fw_BR921600_FC_Off.bin\"
+WILC3000_STA_FW_VERSION = STA_FIRMWARE=\"wifi_firmware.bin\"
+WILC3000_AP_FW_VERSION = AP_FIRMWARE=\"wifi_firmware_ap.bin\"
+WILC3000_P2P_FIRMWARE = P2P_CONCURRENCY_FIRMWARE=\"wifi_firmware_p2p_concurrency.bin\"
+#WILC3000_BT_FIRMWARE = BT_FIRMWARE=\"bt_fw_BR1_5M_FC_13_21.bin\"
+#WILC3000_BT_FIRMWARE = BT_FIRMWARE=\"bt_fw_BR1_5M_FC_21.bin\"
+WILC3000_BT_FIRMWARE = BT_FIRMWARE=\"bt_fw_BR1_5M_FC_Off.bin\"
+#WILC3000_BT_FIRMWARE = BT_FIRMWARE=\"bt_fw_BR115200_FC_Off_13_21.bin\"
+#WILC3000_BT_FIRMWARE = BT_FIRMWARE=\"bt_fw_BR115200_FC_Off_21.bin\"
 
-EXTRA_CFLAGS += -D$(WILC3000_STA_FW_VERSION)
-#EXTRA_CFLAGS += -D$(WILC3000_AP_FW_VERSION)
-#EXTRA_CFLAGS += -D$(WILC3000_P2P_FIRMWARE)
-EXTRA_CFLAGS += -D$(WILC3000_BT_FIRMWARE)
+ccflags-y += -D$(WILC3000_STA_FW_VERSION)
+ccflags-y += -D$(WILC3000_AP_FW_VERSION)
+ccflags-y += -D$(WILC3000_P2P_FIRMWARE)
+ccflags-y += -D$(WILC3000_BT_FIRMWARE)
 
-obj-$(CONFIG_WILC3000) += $(MODULE_NAME).o
-
-EXTRA_CFLAGS += -DEXPORT_SYMTAB
-EXTRA_CFLAGS += -D__CHECK_ENDIAN__
-
-ifeq ($(strip $(CONFIG_WILC3000_SDIO)), y)
-	EXTRA_CFLAGS += -DWILC_SDIO
-	$(MODULE_NAME)-objs += linux_wlan_sdio.o
-
-	ifeq ($(strip $(CONFIG_WILC3000_HW_OOB_INTR)),y)
-		EXTRA_CFLAGS += -DWILC_SDIO_IRQ_GPIO
-	endif
-else
-	EXTRA_CFLAGS += -DWILC_SPI
-	$(MODULE_NAME)-objs += linux_wlan_spi.o
-endif
-
-EXTRA_CFLAGS += -DWILC_ASIC_A0
-EXTRA_CFLAGS += -DPLL_WORKAROUND
-EXTRA_CFLAGS += -DCONNECT_DIRECT
-EXTRA_CFLAGS += -DWILC_PARSE_SCAN_IN_HOST
-
-#EXTRA_CFLAGS += -DTCP_ACK_FILTER
-EXTRA_CFLAGS += -DAGING_ALG
-EXTRA_CFLAGS += -DDISABLE_PWRSAVE_AND_SCAN_DURING_IP
-
-EXTRA_CFLAGS += -DWILC_PLATFORM=WILC_LINUXKERNEL  
-EXTRA_CFLAGS += -Wno-unused-function
-EXTRA_CFLAGS += -DUSE_WIRELESS
-
-EXTRA_CFLAGS += -DSTATIC_MACADDRESS
-EXTRA_CFLAGS += -DCOMPLEMENT_BOOT
-
-#EXTRA_CFLAGS += -DWILC_SLEEP_CLK_SRC_XO
-#EXTRA_CFLAGS += -DWILC_SLEEP_CLK_SRC_RTC
-#EXTRA_CFLAGS += -DWILC_EXT_PA_INV_TX_RX
-#EXTRA_CFLAGS += -DWILC_DISABLE_PMU
-EXTRA_CFLAGS += -DWILC1000_BT_COEXISTENCE
-EXTRA_CFLAGS += -DDOWNLOAD_BT_FW
-EXTRA_CFLAGS += -DWILC_USE_HW_PMU_CLK_SWITCH
-
-ifeq ($(strip $(CONFIG_WILC3000_PREALLOCATE_DURING_SYSTEM_BOOT)),y)
-	EXTRA_CFLAGS += -DWILC_PREALLOC_AT_BOOT
-	EXTRA_CFLAGS += -DMEMORY_STATIC
-else
-	ifeq ($(strip $(CONFIG_WILC3000_PREALLOCATE_AT_LOADING_DRIVER)),y)
-		EXTRA_CFLAGS += -DMEMORY_STATIC
-		EXTRA_CFLAGS += -DWILC_PREALLOC_AT_INSMOD
-	else
-		ifeq ($(strip $(CONFIG_WILC3000_DYNAMICALLY_ALLOCATE_MEMROY)),y)
-			EXTRA_CFLAGS += -DWILC_NORMAL_ALLOC
-		endif
-	endif
-endif
-
-
-EXTRA_CFLAGS += -I$(src)/
-
-
-
-
-
-$(MODULE_NAME)-objs += wilc_wfi_netdevice.o
-$(MODULE_NAME)-objs += wilc_wfi_cfgoperations.o
-$(MODULE_NAME)-objs += linux_wlan.o
-$(MODULE_NAME)-objs += linux_mon.o
-
-$(MODULE_NAME)-objs += wilc_memory.o
-$(MODULE_NAME)-objs += wilc_msgqueue.o
-$(MODULE_NAME)-objs += wilc_semaphore.o
-$(MODULE_NAME)-objs += wilc_sleep.o
-$(MODULE_NAME)-objs += wilc_strutils.o
-$(MODULE_NAME)-objs += wilc_thread.o
-$(MODULE_NAME)-objs += wilc_time.o
-$(MODULE_NAME)-objs += wilc_timer.o
-
-$(MODULE_NAME)-objs += coreconfigurator.o
-$(MODULE_NAME)-objs += host_interface.o
-$(MODULE_NAME)-objs += wilc_sdio.o
-$(MODULE_NAME)-objs += wilc_spi.o
-$(MODULE_NAME)-objs += wilc_wlan_cfg.o
-
-WILC1000_SRC_VERSION = 10.0
+WILC3000_SRC_VERSION = 4.1
 PATCHLEVEL = 0
-WILC1000_FW_VERSION = 0
+WILC3000_FW_VERSION = 0
 
-EXTRA_CFLAGS += -D__DRIVER_VERSION__=\"$(WILC3000_SRC_VERSION).$(PATCHLEVEL)\"
+ccflags-y += -D__DRIVER_VERSION__=\"$(WILC3000_SRC_VERSION).$(PATCHLEVEL)\"
+ccflags-y += -D__FW_VERSION__=\"$(WILC3000_SRC_VERSION).$(WILC3000_FW_VERSION)\"
+
+ccflags-$(CONFIG_WILC3000_SDIO) += -DWILC_SDIO
+ccflags-$(CONFIG_WILC3000_SPI) += -DWILC_SPI
+ccflags-$(CONFIG_WILC3000_HW_OOB_INTR) += -DWILC_SDIO_IRQ_GPIO
+ccflags-$(CONFIG_WILC3000_STATICALLY_ALLOCATE_MEMORY) += -DMEMORY_STATIC
+ccflags-$(CONFIG_WILC3000_ENABLE_DEBUGFS) += -DWILC_DEBUGFS
+
+ccflags-y += -DWILC_ASIC_A0 -DPLL_WORKAROUND -DCONNECT_DIRECT -DWILC_PARSE_SCAN_IN_HOST -DTCP_ACK_FILTER -DAGING_ALG -DDISABLE_PWRSAVE_AND_SCAN_DURING_IP \
+			-DWILC_PLATFORM=WILC_LINUXKERNEL  -Wno-unused-function -DUSE_WIRELESS -DWILC1000_BT_COEXISTENCE -DDOWNLOAD_BT_FW \
+
+ 
+
+
+
+
+
+
+wilc3000-y += wilc_wfi_netdevice.o
+wilc3000-y += wilc_wfi_cfgoperations.o
+wilc3000-y += linux_wlan.o
+wilc3000-y += linux_mon.o
+wilc3000-y += linus_os_wrapper.o
+wilc3000-y += at_pwr_dev.o
+wilc3000-$(CONFIG_WILC3000_SDIO) += linux_wlan_sdio.o
+wilc3000-$(CONFIG_WILC3000_SPI) += linux_wlan_spi.o
+wilc3000-y += wilc_memory.o
+wilc3000-y += wilc_msgqueue.o
+wilc3000-y += wilc_semaphore.o
+wilc3000-y += wilc_sleep.o
+wilc3000-y += wilc_strutils.o
+wilc3000-y += wilc_thread.o
+wilc3000-y += wilc_time.o
+wilc3000-y += wilc_timer.o
+wilc3000-y += coreconfigurator.o
+wilc3000-y += host_interface.o
+wilc3000-y += wilc_sdio.o
+wilc3000-y += wilc_spi.o
+wilc3000-y += wilc_wlan_cfg.o
+wilc3000-y += wilc_wlan.o

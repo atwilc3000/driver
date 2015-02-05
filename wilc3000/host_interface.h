@@ -1355,7 +1355,7 @@ WILC_Sint32 host_int_frame_register(WILC_WFIDrvHandle hWFIDrv, WILC_Uint16 u16Fr
 WILC_Sint32 host_int_set_wfi_drv_handler(WILC_Uint32 u32address);
 WILC_Sint32 host_int_set_operation_mode(WILC_WFIDrvHandle hWFIDrv, WILC_Uint32 u32mode);
 
-#ifdef WILC3000_BT_COEXISTENCE
+#ifdef WILC1000_BT_COEXISTENCE
 WILC_Sint32 host_int_change_bt_coex_mode(WILC_WFIDrvHandle hWFIDrv,WILC_Uint8 u8BtCoexMode);
 #endif
 

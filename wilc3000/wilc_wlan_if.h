@@ -494,7 +494,7 @@ typedef enum {
     /*  Values to get :          0               1               	           														*/
     /*  --------------------------------------------------------------      */
 	WID_STATUS                         			= 0x0005,
-#ifdef WILC3000_BT_COEXISTENCE
+#ifdef WILC1000_BT_COEXISTENCE
 	WID_BT_COEX_MODE					= 0x0006,
 #endif	
     /*  Scan type                                                            														*/

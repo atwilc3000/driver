@@ -9,6 +9,7 @@
 
 #include "wilc_wlan_if.h"
 #include "wilc_wlan.h"
+#include "at_pwr_dev.h"
 #define INLINE static __inline
 
 /********************************************
@@ -104,8 +105,8 @@ typedef struct {
 
 static wilc_wlan_dev_t g_wlan; 
 
-INLINE void chip_allow_sleep(void);
-INLINE void chip_wakeup(void);
+//INLINE void chip_allow_sleep(void);
+//INLINE void chip_wakeup(void);
 /********************************************
 
 	Debug
@@ -114,7 +115,7 @@ INLINE void chip_wakeup(void);
 
 static uint32_t dbgflag = N_INIT|N_ERR|N_INTR|N_TXQ|N_RXQ;
 
-static void wilc_debug(uint32_t flag, char *fmt, ...)
+void wilc_debug(uint32_t flag, char *fmt, ...)
 {
 	char buf[256];
 	va_list args;
@@ -132,19 +133,23 @@ static void wilc_debug(uint32_t flag, char *fmt, ...)
 	return;
 }
 
-static CHIP_PS_STATE_T genuChipPSstate = CHIP_WAKEDUP;
+CHIP_PS_STATE_T genuChipPSstate = CHIP_WAKEDUP;
+CHIP_PS_STATE_T genuChipPSstateFromWifi = CHIP_WAKEDUP;
 
 /*BugID_5213*/
 /*acquire_bus() and release_bus() are made INLINE functions*/
 /*as a temporary workaround to fix a problem of receiving*/
 /*unknown interrupt from FW*/
+#if 0
 INLINE void acquire_bus(BUS_ACQUIRE_T acquire)
 {
 
 	g_wlan.os_func.os_enter_cs(g_wlan.hif_lock);
-	if(acquire == ACQUIRE_AND_WAKEUP)
-		chip_wakeup();
-	
+	if(genuChipPSstate != CHIP_WAKEDUP)
+	{
+		if(acquire == ACQUIRE_AND_WAKEUP)
+			chip_wakeup();
+	}	
 }
 INLINE void release_bus(BUS_RELEASE_T release)
 {
@@ -152,6 +157,8 @@ INLINE void release_bus(BUS_RELEASE_T release)
 		chip_allow_sleep();
 	g_wlan.os_func.os_leave_cs(g_wlan.hif_lock);
 }
+#endif
+
 /********************************************
 
 	Queue
@@ -762,15 +769,16 @@ static struct rxq_entry_t *wilc_wlan_rxq_remove(void)
 ********************************************/
 
 
-
+#if 0
 INLINE void chip_allow_sleep(void)
 {
 	uint32_t reg=0;
 
 	/* Clear bit 1 */
 	g_wlan.hif_func.hif_read_reg(0xf0, &reg);
-	
 	g_wlan.hif_func.hif_write_reg(0xf0, reg & ~(1 << 0));
+
+	genuChipPSstate = CHIP_SLEEPING_AUTO;
 }
 
 INLINE void chip_wakeup(void)
@@ -808,11 +816,11 @@ INLINE void chip_wakeup(void)
 		do
 		{
 			/* Clear bit 0 */
-			g_wlan.hif_func.hif_write_reg(0xf0, reg & ~(1 << 0));
+			//g_wlan.hif_func.hif_write_reg(0xf0, reg & ~(1 << 0));
 			/* Set bit 0 */
 			g_wlan.hif_func.hif_write_reg(0xf0, reg | (1 << 0));
 
-			WILC_Sleep(1);			
+			//WILC_Sleep(1);			
 							
 			// Check the clock status
 			g_wlan.hif_func.hif_read_reg(0xf0, &clk_status_reg);
@@ -854,6 +862,7 @@ INLINE void chip_wakeup(void)
 	}
 	genuChipPSstate = CHIP_WAKEDUP;
 }
+#endif
 
 void chip_sleep_manually(WILC_Uint32 u32SleepTime)
 {
@@ -862,6 +871,9 @@ void chip_sleep_manually(WILC_Uint32 u32SleepTime)
 		/* chip is already sleeping. Do nothing */
 		return;
 	}
+
+	WILC_PRINTF("in chip_sleep_manually()\n");
+	
 	acquire_bus(ACQUIRE_ONLY);
 
 	chip_allow_sleep();
@@ -870,7 +882,7 @@ void chip_sleep_manually(WILC_Uint32 u32SleepTime)
 	g_wlan.hif_func.hif_write_reg(0x10B8, 1);
 
 	genuChipPSstate = CHIP_SLEEPING_MANUAL;
-	release_bus(RELEASE_ONLY);
+	release_bus(RELEASE_ONLY, PWR_DEV_SRC_WIFI);
 
 }
 
@@ -977,7 +989,7 @@ static int wilc_wlan_handle_txq(uint32_t* pu32TxqCount)
 			PRINT_D(TX_DBG,"Mark the last entry in VMM table - number of previous entries = %d\n",i);
 			vmm_table[i] = 0x0;	/* mark the last element to 0 */
 		}
-		acquire_bus(ACQUIRE_AND_WAKEUP);
+		acquire_bus(ACQUIRE_AND_WAKEUP); //First acquire should keep the chip awake
 		counter = 0;
 		do {
 
@@ -1005,10 +1017,10 @@ static int wilc_wlan_handle_txq(uint32_t* pu32TxqCount)
 				/**
 					wait for vmm table is ready
 				**/
-				PRINT_WRN(GENERIC_DBG, "[wilc txq]: warn, vmm table not clear yet, wait... \n");
-				release_bus(RELEASE_ALLOW_SLEEP);
-				p->os_func.os_sleep(3);	/* wait 3 ms */
-				acquire_bus(ACQUIRE_AND_WAKEUP);
+				//PRINT_WRN(GENERIC_DBG, "[wilc txq]: warn, vmm table not clear yet, wait... \n");
+				//release_bus(RELEASE_ALLOW_SLEEP);
+				//p->os_func.os_sleep(3);	/* wait 3 ms */
+				//acquire_bus(ACQUIRE_AND_WAKEUP);
 			}
 		} while (!p->quit);
 
@@ -1068,10 +1080,10 @@ static int wilc_wlan_handle_txq(uint32_t* pu32TxqCount)
 					//entries = ((reg>>3)&0x2f);
 					break;
 				} else{
-					release_bus(RELEASE_ALLOW_SLEEP);
-					p->os_func.os_sleep(3);	/* wait 3 ms */
-					acquire_bus(ACQUIRE_AND_WAKEUP);
-					PRINT_WRN(GENERIC_DBG, "Can't get VMM entery - reg = %2x\n",reg);
+					//release_bus(RELEASE_ALLOW_SLEEP);
+					//p->os_func.os_sleep(3);	/* wait 3 ms */
+					//acquire_bus(ACQUIRE_AND_WAKEUP);
+					//PRINT_WRN(GENERIC_DBG, "Can't get VMM entery - reg = %2x\n",reg);
 				}
 			} while (--timeout);
 			if(timeout <= 0)
@@ -1115,7 +1127,7 @@ static int wilc_wlan_handle_txq(uint32_t* pu32TxqCount)
 
 		/* since copying data into txb takes some time, then 
 		allow the bus lock to be released let the RX task go. */
-		release_bus(RELEASE_ALLOW_SLEEP);
+		release_bus(RELEASE_ONLY, PWR_DEV_SRC_WIFI); //Keep the chip awake, will allow sleep at the end of handle_txq
 
 		/**
 			Copy data to the TX buffer
@@ -1219,7 +1231,7 @@ static int wilc_wlan_handle_txq(uint32_t* pu32TxqCount)
 
 _end_:	 
 
-		release_bus(RELEASE_ALLOW_SLEEP);
+		release_bus(RELEASE_ALLOW_SLEEP, PWR_DEV_SRC_WIFI); //last release_bus, should allow the chip to sleep
 		if (ret != 1)
 			break;
 	} while(0);
@@ -1531,7 +1543,7 @@ void wilc_handle_isr(void)
 #if ((!defined WILC_SDIO) || (defined WILC_SDIO_IRQ_GPIO))
 	linux_wlan_enable_irq();
 #endif
-	release_bus(RELEASE_ALLOW_SLEEP);
+	release_bus(RELEASE_ALLOW_SLEEP, PWR_DEV_SRC_WIFI);
 }
 
 /********************************************
@@ -1586,7 +1598,7 @@ static int wilc_wlan_firmware_download(const uint8_t *buffer, uint32_t buffer_si
 			offset += size2;
 			size -= size2;			
 		}
-		release_bus(RELEASE_ONLY);
+		release_bus(RELEASE_ONLY, PWR_DEV_SRC_WIFI);
 
 		if (!ret){ 
 			/*EIO	5*/
@@ -1670,8 +1682,13 @@ static int wilc_bt_firmware_download(const uint8_t *buffer, uint32_t buffer_size
 			/* Copy firmware into a DMA coherent buffer */
 			memcpy(dma_buffer, &buffer[offset], size2);
 			ret = p->hif_func.hif_block_tx(addr, dma_buffer, size2);
-			if (!ret) break;			
-
+			if (!ret) break;
+		#ifdef PLAT_ALLWINNER_A31
+		// Ticket #878: delay after the block tx, or else the FW will be downloaded corrupted in the IRAM
+		// for an unknown reason
+			p->os_func.os_atomic_sleep(1);
+		#endif
+			
 			addr += size2;
 			offset += size2;
 			size -= size2;			
@@ -1715,14 +1732,14 @@ static int wilc_wlan_start(void)
 	ret = p->hif_func.hif_read_reg(WILC_VMM_CORE_CTL, &reg);
 	if (!ret) {
 		wilc_debug(N_ERR, "[wilc start]: fail read reg vmm_core_ctl...\n");
-		release_bus(RELEASE_ALLOW_SLEEP);
+		release_bus(RELEASE_ALLOW_SLEEP, PWR_DEV_SRC_WIFI);
  		return ret;
 	}
 	reg |= (p->io_func.io_type<<2); 
 	ret = p->hif_func.hif_write_reg(WILC_VMM_CORE_CTL, reg);
 	if (!ret) {
 		wilc_debug(N_ERR, "[wilc start]: fail write reg vmm_core_ctl...\n");
-		release_bus(RELEASE_ONLY);
+		release_bus(RELEASE_ONLY, PWR_DEV_SRC_WIFI);
  		return ret;
 	}
 #else
@@ -1736,7 +1753,7 @@ static int wilc_wlan_start(void)
 	ret = p->hif_func.hif_write_reg(WILC_VMM_CORE_CFG, reg);
 	if (!ret) {
 		wilc_debug(N_ERR, "[wilc start]: fail write reg vmm_core_cfg...\n");
-		release_bus(RELEASE_ONLY);
+		release_bus(RELEASE_ONLY, PWR_DEV_SRC_WIFI);
 		/* EIO  5*/
 		ret = -5;
  		return ret;
@@ -1779,7 +1796,7 @@ static int wilc_wlan_start(void)
 	ret = p->hif_func.hif_write_reg(WILC_GP_REG_1, reg);
 	if (!ret) {
 		wilc_debug(N_ERR, "[wilc start]: fail write WILC_GP_REG_1 ...\n");
-		release_bus(RELEASE_ONLY);
+		release_bus(RELEASE_ONLY, PWR_DEV_SRC_WIFI);
 		/* EIO  5*/
 		ret = -5;
  		return ret;
@@ -1795,7 +1812,7 @@ static int wilc_wlan_start(void)
 	ret = p->hif_func.hif_read_reg(0x3b0000, &chipid);
 	if (!ret) {
 		wilc_debug(N_ERR, "[wilc start]: fail read reg 0x3b0000 ...\n");
-		release_bus(RELEASE_ONLY);
+		release_bus(RELEASE_ONLY, PWR_DEV_SRC_WIFI);
 		/* EIO  5*/
 		ret = -5;
  		return ret;
@@ -1817,7 +1834,7 @@ static int wilc_wlan_start(void)
 	reg |= (1ul << 10);			
 	ret = p->hif_func.hif_write_reg(WILC_GLB_RESET_0, reg);	
 	p->hif_func.hif_read_reg(WILC_GLB_RESET_0,&reg);
-	release_bus(RELEASE_ONLY);
+	release_bus(RELEASE_ONLY, PWR_DEV_SRC_WIFI);
 
 	return (ret<0)?ret:0;
 }
@@ -1828,7 +1845,7 @@ void wilc_wlan_global_reset(void)
 	wilc_wlan_dev_t *p = (wilc_wlan_dev_t *)&g_wlan;
 	acquire_bus(ACQUIRE_AND_WAKEUP);
 	p->hif_func.hif_write_reg(WILC_GLB_RESET_0,0x0);
-	release_bus(RELEASE_ONLY);	
+	release_bus(RELEASE_ONLY, PWR_DEV_SRC_WIFI);	
 }
 static int wilc_wlan_stop(void)
 {
@@ -1840,10 +1857,43 @@ static int wilc_wlan_stop(void)
 		TODO: stop the firmware, need a re-download
 	**/
 	acquire_bus(ACQUIRE_AND_WAKEUP);
+	
+	/* Adjust coexistence module. This should be done from the FW in the future*/
+	ret = p->hif_func.hif_read_reg(rCOEXIST_CTL, &reg);
+	if (!ret) {
+		PRINT_ER("Error while reading reg\n");
+		release_bus(RELEASE_ALLOW_SLEEP, PWR_DEV_SRC_WIFI);
+		return ret;
+	}
+	// Stop forcing Wifi and force BT
+	reg &= ~ BIT11;
+	reg |= BIT9 | BIT0;
+	ret = p->hif_func.hif_write_reg(rCOEXIST_CTL, reg);
+	if (!ret) {
+		PRINT_ER("Error while writing reg\n");
+		release_bus(RELEASE_ALLOW_SLEEP, PWR_DEV_SRC_WIFI);
+		return ret;
+	}
+	/* Clear Wifi mode*/
+	ret = p->hif_func.hif_read_reg(rGLOBAL_MODE_CONTROL, &reg);
+	if (!ret) {
+		PRINT_ER("Error while reading reg\n");
+		release_bus(RELEASE_ALLOW_SLEEP, PWR_DEV_SRC_WIFI);
+		return ret;
+	}
+	// Stop forcing Wifi and force BT
+	reg &= ~ BIT0;
+	ret = p->hif_func.hif_write_reg(rGLOBAL_MODE_CONTROL, reg);
+	if (!ret) {
+		PRINT_ER("Error while writing reg\n");
+		release_bus(RELEASE_ALLOW_SLEEP, PWR_DEV_SRC_WIFI);
+		return ret;
+	}
+	
 	ret = p->hif_func.hif_read_reg(WILC_GLB_RESET_0, &reg);
 	if (!ret) {
 		PRINT_ER("Error while reading reg\n");
-		release_bus(RELEASE_ALLOW_SLEEP);
+		release_bus(RELEASE_ALLOW_SLEEP, PWR_DEV_SRC_WIFI);
 		return ret;
 	}
 
@@ -1853,7 +1903,7 @@ static int wilc_wlan_stop(void)
 	ret = p->hif_func.hif_write_reg(WILC_GLB_RESET_0, reg);
 	if (!ret) {
 		PRINT_ER("Error while writing reg\n");
-		release_bus(RELEASE_ALLOW_SLEEP);
+		release_bus(RELEASE_ALLOW_SLEEP, PWR_DEV_SRC_WIFI);
 		return ret;
 	}
 	
@@ -1863,7 +1913,7 @@ static int wilc_wlan_stop(void)
 		ret = p->hif_func.hif_read_reg(WILC_GLB_RESET_0, &reg);
 		if (!ret) {
 			PRINT_ER("Error while reading reg\n");
-			release_bus(RELEASE_ALLOW_SLEEP);
+			release_bus(RELEASE_ALLOW_SLEEP, PWR_DEV_SRC_WIFI);
 			return ret;
 		}
 		PRINT_D(GENERIC_DBG,"Read RESET Reg %x : Retry%d\n",reg,timeout);
@@ -1881,7 +1931,7 @@ static int wilc_wlan_stop(void)
 			ret = p->hif_func.hif_read_reg(WILC_GLB_RESET_0, &reg);
 			if (!ret) {
 			PRINT_ER("Error while reading reg\n");
-			release_bus(RELEASE_ALLOW_SLEEP);
+			release_bus(RELEASE_ALLOW_SLEEP, PWR_DEV_SRC_WIFI);
 			return ret;
 			}
 			PRINT_D(GENERIC_DBG,"Read RESET Reg %x : Retry%d\n",reg,timeout);
@@ -1901,7 +1951,7 @@ static int wilc_wlan_stop(void)
 	ret = p->hif_func.hif_write_reg(WILC_GLB_RESET_0, reg);					/**/
 /******************************************************************************/
 
-	release_bus(RELEASE_ALLOW_SLEEP);
+	release_bus(RELEASE_ALLOW_SLEEP, PWR_DEV_SRC_WIFI);
 
 	return ret;
 }
@@ -2022,20 +2072,15 @@ static void wilc_wlan_cleanup(void)
 	ret = p->hif_func.hif_read_reg(WILC_GP_REG_0,&reg); 
 	if (!ret) {
 		PRINT_ER("Error while reading reg\n");
-		release_bus(RELEASE_ALLOW_SLEEP);
+		release_bus(RELEASE_ALLOW_SLEEP, PWR_DEV_SRC_WIFI);
 	}
 	PRINT_ER("Writing ABORT reg\n");
   	ret = p->hif_func.hif_write_reg(WILC_GP_REG_0,(reg | ABORT_INT ));  
 	if (!ret) {
 		PRINT_ER("Error while writing reg\n");
-		release_bus(RELEASE_ALLOW_SLEEP);
+		release_bus(RELEASE_ALLOW_SLEEP, PWR_DEV_SRC_WIFI);
 	}
-	release_bus(RELEASE_ALLOW_SLEEP);
-	/**
-		io clean up
-	**/
-	p->hif_func.hif_deinit(NULL);
-
+	release_bus(RELEASE_ALLOW_SLEEP, PWR_DEV_SRC_WIFI);
 }
 
 static int wilc_wlan_cfg_commit(int type,uint32_t drvHandler)
@@ -2281,7 +2326,7 @@ uint32_t init_chip(void)
 
 
 
-	release_bus(RELEASE_ONLY);
+	release_bus(RELEASE_ONLY, PWR_DEV_SRC_WIFI);
 
 	return ret;
 
@@ -2315,7 +2360,7 @@ uint8_t core_11b_ready(void)
 	g_wlan.hif_func.hif_write_reg(0x16082c,1);
 	g_wlan.hif_func.hif_write_reg(0x161600,0x90);
 	g_wlan.hif_func.hif_read_reg(0x161600,&reg_val);
-	release_bus(RELEASE_ONLY);
+	release_bus(RELEASE_ONLY, PWR_DEV_SRC_WIFI);
 		
 	if(reg_val == 0x90)
 		return 0;		
@@ -2331,7 +2376,6 @@ int wilc_wlan_init(wilc_wlan_inp_t *inp, wilc_wlan_oup_t *oup)
 	PRINT_D(INIT_DBG,"Initializing WILC_Wlan ...\n");
 
 	memset((void *)&g_wlan, 0, sizeof(wilc_wlan_dev_t));
-
 	/**
 		store the input
 	**/
@@ -2360,24 +2404,15 @@ int wilc_wlan_init(wilc_wlan_inp_t *inp, wilc_wlan_oup_t *oup)
 	/***
 		host interface init
 	**/
-	
+
 	if ((inp->io_func.io_type & 0x1) == HIF_SDIO) {
-		if (!hif_sdio.hif_init(inp, wilc_debug)) {
-			/* EIO	5 */
-			ret = -5;
-			goto _fail_;
-		}		
+				
 		memcpy((void *)&g_wlan.hif_func, &hif_sdio, sizeof(wilc_hif_func_t));
 	} else{ 	
 	if ((inp->io_func.io_type & 0x1) == HIF_SPI) {
 		/**
 			TODO:
-		**/
-		if (!hif_spi.hif_init(inp, wilc_debug)) {
-			/* EIO	5 */			
-			ret = -5;
-			goto _fail_;
-		}		
+		**/		
 		memcpy((void *)&g_wlan.hif_func, &hif_spi, sizeof(wilc_hif_func_t));
 	} else {
 		/* EIO	5 */
@@ -2412,7 +2447,7 @@ int wilc_wlan_init(wilc_wlan_inp_t *inp, wilc_wlan_oup_t *oup)
 		PRINT_ER("Can't allocate Tx Buffer");
 		goto _fail_;
 		}
-		
+
 /* rx_buffer is not used unless we activate USE_MEM STATIC which is not applicable, allocating such memory is useless*/	
 #ifdef MEMORY_STATIC
 	if(g_wlan.rx_buffer == WILC_NULL)

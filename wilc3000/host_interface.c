@@ -58,7 +58,7 @@ extern WILC_Uint8 g_wilc_initialized;
 #define HOST_IF_MSG_DEL_ALL_STA  ((WILC_Uint16)36)
 #define HOST_IF_MSG_DEL_ALL_RX_BA_SESSIONS		((WILC_Uint16)37)
 
-#ifdef WILC3000_BT_COEXISTENCE
+#ifdef WILC1000_BT_COEXISTENCE
 #define HOST_IF_MSG_CHANGE_BT_COEX_MODE	((WILC_Uint16)38)
 #endif
 
@@ -374,7 +374,7 @@ typedef struct
 }tstrHostIFDelSta;
 
 
-#ifdef WILC3000_BT_COEXISTENCE
+#ifdef WILC1000_BT_COEXISTENCE
 typedef struct 
 {
 	WILC_Uint8 u8BTCoexMode;
@@ -487,7 +487,7 @@ typedef union _tuniHostIFmsgBody
 	#endif
 	WILC_Char * 				pUserData;
 	tstrHostIFDelAllSta       strHostIFDelAllSta;	
-#ifdef WILC3000_BT_COEXISTENCE
+#ifdef WILC1000_BT_COEXISTENCE
 	tstrHostIFBTCoexMode	strHostIfBTMode;
 #endif
 	
@@ -966,7 +966,7 @@ static WILC_Sint32 Handle_GetMacAddress(void * drvHandler, tstrHostIfGetMacAddre
 	return s32Error;
 }
 
-#ifdef WILC3000_BT_COEXISTENCE
+#ifdef WILC1000_BT_COEXISTENCE
 static WILC_Sint32 Handle_BTCoexModeChange(void * drvHandler, tstrHostIFBTCoexMode* pstrHostIFBTCoexMode)
 {
 
@@ -4850,7 +4850,7 @@ static void hostIFthread(void* pvArg)
 				Handle_SetChannel(strHostIFmsg.drvHandler,&strHostIFmsg.uniHostIFmsgBody.strHostIFSetChan);
 				break;
 			}			
-#ifdef WILC3000_BT_COEXISTENCE
+#ifdef WILC1000_BT_COEXISTENCE
 			case HOST_IF_MSG_CHANGE_BT_COEX_MODE:
 			{
 				Handle_BTCoexModeChange(strHostIFmsg.drvHandler, &strHostIFmsg.uniHostIFmsgBody.strHostIfBTMode);
@@ -6424,7 +6424,7 @@ WILC_Sint32 host_int_set_mac_chnl_num(WILC_WFIDrvHandle hWFIDrv,WILC_Uint8 u8ChN
 	return s32Error;
 }
 
-#ifdef WILC3000_BT_COEXISTENCE
+#ifdef WILC1000_BT_COEXISTENCE
 WILC_Sint32 host_int_change_bt_coex_mode(WILC_WFIDrvHandle hWFIDrv,WILC_Uint8 u8BtCoexMode)
 {
 	WILC_Sint32 s32Error = WILC_SUCCESS;
@@ -8241,8 +8241,6 @@ uint32_t wilc_get_chipid(uint8_t);
 WILC_Sint32 host_int_set_power_mgmt(WILC_WFIDrvHandle hWFIDrv, WILC_Bool bIsEnabled, WILC_Uint32 u32Timeout)
 {
 	WILC_Sint32 s32Error = WILC_SUCCESS;
-
-
 	tstrWILC_WFIDrv * pstrWFIDrv = (tstrWILC_WFIDrv *)hWFIDrv;
 	tstrHostIFmsg strHostIFmsg;
 	tstrHostIfPowerMgmtParam* pstrPowerMgmtParam = &strHostIFmsg.uniHostIFmsgBody.strPowerMgmtparam;

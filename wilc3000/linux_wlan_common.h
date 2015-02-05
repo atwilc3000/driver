@@ -19,6 +19,7 @@ enum debug_region{
 	Bus_debug,
 	Mem_debug,
 	Firmware_debug,
+	PwrDev_debug,
 	COMP = 0xFFFFFFFF,
 };
 
@@ -41,6 +42,7 @@ enum debug_region{
 #define BUS_DBG		  		(1<<Bus_debug)
 #define MEM_DBG		  		(1<<Mem_debug)
 #define FIRM_DBG	  		(1<<Firmware_debug)
+#define PWRDEV_DBG	  		(1<<PwrDev_debug)
 
 #if defined (WILC_DEBUGFS)
 extern void kmsgdump_write(char *fmt, ...);
@@ -78,7 +80,7 @@ extern atomic_t DEBUG_LEVEL;
 
 #else
 
-#define REGION	 INIT_DBG|GENERIC_DBG|CFG80211_DBG | FIRM_DBG | HOSTAPD_DBG
+#define REGION	 INIT_DBG|GENERIC_DBG|CFG80211_DBG | FIRM_DBG | HOSTAPD_DBG | PWRDEV_DBG
 
 #define DEBUG	    1
 #define INFO        0

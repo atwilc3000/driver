@@ -239,7 +239,7 @@ typedef struct{
 	spinlock_t txq_spinlock;
 	
 	struct mutex rxq_cs;
-	struct mutex hif_cs;
+	struct mutex* hif_cs;
 
 	//struct mutex txq_event;
 	struct semaphore rxq_event;
@@ -263,6 +263,8 @@ typedef struct{
 
 	struct task_struct* rxq_thread;
 	struct task_struct* txq_thread;
+
+	struct task_struct* exit_thread;
 
 	unsigned char eth_src_address[NUM_CONCURRENT_IFC][6];
 	//unsigned char eth_dst_address[6];
