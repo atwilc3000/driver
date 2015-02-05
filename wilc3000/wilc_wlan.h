@@ -114,6 +114,9 @@
 #define WILC_GP_REG_0   0x149c
 #define WILC_GP_REG_1   0x14a0
 
+#define rCOEXIST_CTL 			(0x161E00)
+#define rGLOBAL_MODE_CONTROL	(0x1614)
+
 #define rHAVE_SDIO_IRQ_GPIO_BIT      (0)
 #define rHAVE_USE_PMU_BIT            (1)
 #define rHAVE_SLEEP_CLK_SRC_RTC_BIT  (2)

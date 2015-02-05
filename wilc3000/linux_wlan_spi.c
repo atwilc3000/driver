@@ -23,6 +23,10 @@
 static uint32_t SPEED = MIN_SPEED;
 
 struct spi_device* wilc_spi_dev;
+
+extern struct semaphore spi_probe_sync;
+extern void linux_wlan_unlock(void* vp);
+
 void linux_spi_deinit(void* vp);
 
 static int __init wilc_bus_probe(struct spi_device* spi){
@@ -30,6 +34,8 @@ static int __init wilc_bus_probe(struct spi_device* spi){
 	PRINT_D(BUS_DBG,"spiModalias: %s\n",spi->modalias);
 	PRINT_D(BUS_DBG,"spiMax-Speed: %d\n",spi->max_speed_hz);
 	wilc_spi_dev = spi;
+
+	linux_wlan_unlock(&spi_probe_sync);
 	
 	return 0;
 }
