@@ -40,7 +40,11 @@
 /*								Macros										 */
 /*****************************************************************************/ 
 #define DOWNLOAD_BT_FW_ONCE
+#ifdef DOWNLOAD_BT_FW
+#ifndef BT_FIRMWARE
 #define BT_FIRMWARE		"bt_firmware.bin"
+#endif
+#endif
 
 /*****************************************************************************/
 /*								Externs										 */
@@ -666,6 +670,7 @@ void chip_wakeup(void)
 	//else if ((g_wlan.io_func.io_type & 0x1) == HIF_SDIO) 
 	#else
 	{
+		int wake_seq_trials = 5;
 		//g_wlan.hif_func.hif_read_reg(0xf0, &reg);
 		pwr_dev.hif_func.hif_read_reg(0xf0, &reg);	
 		do
@@ -707,7 +712,7 @@ void chip_wakeup(void)
 				//g_wlan.hif_func.hif_write_reg(0xf0, reg & (~ (1 << 0)));
 				pwr_dev.hif_func.hif_write_reg(0xf0, reg & (~ (1 << 0)));
 			}
-		}while((clk_status_reg & 0x10) == 0);
+		}while(((clk_status_reg & 0x10) == 0) && (wake_seq_trials-- >0));
 	}
 	#endif
 
@@ -1030,9 +1035,7 @@ static int wilc_bt_firmware_download(void)
 			ret = pwr_dev.hif_func.hif_block_tx(addr, dma_buffer, size2);
 
 			#ifdef PLAT_ALLWINNER_A31
-			// Ticket #878: delay after the block tx, or else the FW will be downloaded corrupted in the IRAM
-			// for an unknown reason			
-			linux_wlan_msleep(1);
+			linux_wlan_msleep(1); // linux_wlan_atomic_msleep
 			#endif
 			
 			if(genuChipPSstateFromWifi == CHIP_SLEEPING_AUTO)

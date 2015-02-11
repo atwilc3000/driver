@@ -2243,6 +2243,8 @@ WILC_Sint32 CoreConfiguratorDeInit(void)
 #if WILC_PLATFORM !=WILC_WIN32
 /*Using the global handle of the driver*/
 extern wilc_wlan_oup_t* gpstrWlanOps;
+extern volatile int g_bWaitForRecovery;
+uint32_t cfg_timed_out_cnt = 0;
 /**
 *  @brief 		sends certain Configuration Packet based on the input WIDs pstrWIDs
 *  using driver config layer
@@ -2267,9 +2269,12 @@ WILC_Sint32 SendConfigPkt(WILC_Uint8 u8Mode, tstrWID* pstrWIDs,
 		PRINT_INFO(CORECONFIG_DBG,"Net Dev is still not initialized\n");
 		return 1;
 	}
-	else
+	else  if(g_bWaitForRecovery)		
 	{
-		//WILC_PRINTF("Net Dev is initialized\n");
+		WILC_PRINTF("Host interface is suspended\n");
+		while(g_bWaitForRecovery)
+			WILC_Sleep(300);
+		WILC_PRINTF("Host interface is resumed\n");
 	}
 	if( gpstrWlanOps->wlan_cfg_set == NULL ||
 			gpstrWlanOps->wlan_cfg_get == NULL)
@@ -2326,6 +2331,7 @@ WILC_Sint32 SendConfigPkt(WILC_Uint8 u8Mode, tstrWID* pstrWIDs,
 		}
 	}
 
+	cfg_timed_out_cnt = (ret != -1)? 0 : cfg_timed_out_cnt+1;
 	return ret;
 }
 #endif

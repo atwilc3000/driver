@@ -29,7 +29,8 @@ extern void linux_wlan_unlock(void* vp);
 
 void linux_spi_deinit(void* vp);
 
-static int __init wilc_bus_probe(struct spi_device* spi){
+extern volatile int gbCrashRecover;
+static int wilc_bus_probe(struct spi_device* spi){
 	
 	PRINT_D(BUS_DBG,"spiModalias: %s\n",spi->modalias);
 	PRINT_D(BUS_DBG,"spiMax-Speed: %d\n",spi->max_speed_hz);
@@ -73,7 +74,7 @@ int linux_spi_init(void* vp){
 	static int called = 0;
 	
 	
-	if(called == 0){
+	if(called == 0 || gbCrashRecover){
 		called++;
 		if(&wilc_bus == NULL){
 			PRINT_ER("wilc_bus address is NULL\n");

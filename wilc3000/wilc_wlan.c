@@ -1558,6 +1558,7 @@ static int wilc_wlan_firmware_download(const uint8_t *buffer, uint32_t buffer_si
 	uint32_t addr, size, size2, blksz;
 	uint8_t *dma_buffer;
 	int ret = 0;
+	uint32_t reg = 0;
 
 	blksz = (1ul << 12); /* Bug 4703: 4KB Good enough size for most platforms = PAGE_SIZE. */
 	/* Allocate a DMA coherent  buffer. */
@@ -1570,6 +1571,20 @@ static int wilc_wlan_firmware_download(const uint8_t *buffer, uint32_t buffer_si
 	}
 	
 	PRINT_D(INIT_DBG,"Downloading firmware size = %d ...\n",buffer_size);
+
+	acquire_bus(ACQUIRE_ONLY);
+
+	p->hif_func.hif_read_reg(WILC_GLB_RESET_0,&reg);
+
+	/* Reset the CPU before changing IRAM*/
+	reg &= ~(1ul << 10);			
+	ret = p->hif_func.hif_write_reg(WILC_GLB_RESET_0, reg);
+	p->hif_func.hif_read_reg(WILC_GLB_RESET_0,&reg);
+	if((reg & (1ul << 10)) != 0)
+		PRINT_ER("Failed to reset Wifi CPU\n");
+	
+	release_bus(RELEASE_ONLY, PWR_DEV_SRC_WIFI);
+
 	/**
 		load the firmware
 	**/
@@ -1582,6 +1597,7 @@ static int wilc_wlan_firmware_download(const uint8_t *buffer, uint32_t buffer_si
 		size = BYTE_SWAP(size);
 #endif
 		acquire_bus(ACQUIRE_ONLY);
+		
 		offset += 8;		
 		while(((int)size) && (offset < buffer_size)) {
 			if(size <= blksz) {

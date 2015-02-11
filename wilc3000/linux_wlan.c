@@ -55,6 +55,7 @@ extern void mmc_stop_host(struct mmc_host *host);
 #include "wilc_host_ap.h"
 #endif
 
+extern uint32_t cfg_timed_out_cnt;
 #include "at_pwr_dev.h"
 #include "linux_os_wrapper.h"
 
@@ -139,6 +140,10 @@ int  mac_close(struct net_device *ndev);
 static struct net_device_stats *mac_stats(struct net_device *dev);
 static int  mac_ioctl(struct net_device *ndev, struct ifreq *req, int cmd);
 static void wilc_set_multicast_list(struct net_device *dev);
+
+volatile int gbCrashRecover = 0;
+volatile int g_bWaitForRecovery = 0;
+
 void linux_wlan_free_firmware(void);
 
 linux_wlan_t* g_linux_wlan = NULL;
@@ -231,22 +236,107 @@ void Reset_WatchDogdebugger()
 	WatchDogdebuggerCounter=0;
 }
 
+#endif
+
+int bDebugThreadRunning = 0;
+
 static int DebuggingThreadTask(void* vp)
 {
-	while(1){
-			while(!WatchDogdebuggerCounter)
+	//static uint8_t rssI_failure_count = 0;
+	struct WILC_WFI_priv* priv;
+	perInterface_wlan_t* nic;
+	int timeout = 100;
+	static uint32_t tst = 1;
+	int i = 0;	
+	while(bDebugThreadRunning)
+	{
+		if(g_linux_wlan->wilc1000_initialized)
+		{
+			printk("*** Debug Thread Running ***\n");
+			if(!linux_wlan_lock_timeout(&g_linux_wlan->wdt_thread_ended,6000))
 			{
-				printk("Debug Thread Running %d\n",timeNo);
-				WatchDogdebuggerCounter=1;
-				msleep(10000);
+				while(!kthread_should_stop())
+					schedule();
+				printk("Exit debug thread\n");
+				return 0;
 			}
-			dump_logs();
-			WatchDogdebuggerCounter=0;
+
+			if(bDebugThreadRunning)
+			{			
+				priv = wiphy_priv(g_linux_wlan->strInterfaceInfo[0].wilc_netdev->ieee80211_ptr->wiphy);
+				#if 0
+				printk(" == get RSSI ==[%d]\n",tst);
+				if(Handle_GetRssi())
+					rssI_failure_count++;  
+				else
+					rssI_failure_count = 0;  
+				#endif
+				if(cfg_timed_out_cnt >= 5) // || !(tst++%20))
+				{
+					cfg_timed_out_cnt = 0;					
+					timeout = 10;
+
+					gbCrashRecover = 1;
+					g_bWaitForRecovery = 1;
+					
+					printk("\n\n<<<<<>>>>>\n\n");
+					mac_close(g_linux_wlan->strInterfaceInfo[0].wilc_netdev);
+#if 0					
+					linux_wlan_device_power(0);
+					mdelay(100);					
+					linux_wlan_device_power(1);
+					mdelay(250);
+					//printk(">> Calling custom_spi_init\n");
+					custom_spi_init();
+					//printk(">> Done custom_spi_init\n");
+					mdelay(150);
+					//printk(">> Calling mac_open()\n");
+#endif
+					/* Always recover P2P interface first because 
+					mac_open for STA will mac_open P2P interface
+					for A31 and other tablets with similar behaviour
+					*/
+					nic = netdev_priv(g_linux_wlan->strInterfaceInfo[1].wilc_netdev);
+					if(nic->mac_opened==1){
+						timeout = 10;
+						while(mac_open(g_linux_wlan->strInterfaceInfo[1].wilc_netdev)&&--timeout);
+						{
+							msleep(100);
+						}
+						if(timeout == 0)
+						{
+							printk("couldn't restart P2P again :(");
+						}
+					}
+					
+					while(mac_open(g_linux_wlan->strInterfaceInfo[0].wilc_netdev)&&--timeout);
+					{
+						msleep(100);
+					}
+					if(timeout == 0)
+					{
+						printk("couldn't restart again :(");
+						gbCrashRecover = 0;
+						g_bWaitForRecovery = 0;
+					}
+					gbCrashRecover = 0;
+					/*Reprogram GPIO values*/
+					
+					//custom_gpio_reprogram();
+					
+				}	
+				
+			}		
 		}
+		else
+		{
+			msleep(1000);
+		}
+	}
+	return 0;
 }
 
 
-#endif
 
 
 #ifdef DISABLE_PWRSAVE_AND_SCAN_DURING_IP
@@ -769,6 +859,7 @@ static int linux_wlan_txq_task(void* vp)
 static void linux_wlan_rx_complete(void){
 	PRINT_D(RX_DBG,"RX completed\n");
 }
+extern struct device *dev;
 int linux_wlan_get_firmware(perInterface_wlan_t* p_nic){
 
 	perInterface_wlan_t* nic = p_nic;
@@ -809,24 +900,24 @@ int linux_wlan_get_firmware(perInterface_wlan_t* p_nic){
 		root file system with the name specified above */
 
 #ifdef WILC_SDIO
-	if( request_firmware(&wilc_firmware,firmware, &g_linux_wlan->wilc_sdio_func->dev) != 0){
+	if( request_firmware(&wilc_firmware,firmware, dev) != 0){
 		PRINT_ER("%s - firmare not available\n",firmware);
 		ret = -1;
 		goto _fail_;
 	}
 #ifdef DOWNLOAD_BT_FW
-	if( request_firmware(&wilc_bt_firmware,BT_FIRMWARE, &g_linux_wlan->wilc_sdio_func->dev) != 0){
+	if( request_firmware(&wilc_bt_firmware,BT_FIRMWARE, dev) != 0){
 		PRINT_ER("%s - firmare not available. Skip!\n",firmware);
 	}
 #endif	
 #else
-	if( request_firmware(&wilc_firmware,firmware, &g_linux_wlan->wilc_spidev->dev) != 0){
+	if( request_firmware(&wilc_firmware,firmware, &dev) != 0){
 		PRINT_ER("%s - firmare not available\n",firmware);
 		ret = -1;
 		goto _fail_;
 	}
 #ifdef DOWNLOAD_BT_FW
-	if( request_firmware(&wilc_bt_firmware,BT_FIRMWARE, &g_linux_wlan->wilc_spidev->dev) != 0){
+	if( request_firmware(&wilc_bt_firmware,BT_FIRMWARE, &dev) != 0){
 		PRINT_ER("%s - firmare not available. Skip\n",BT_FIRMWARE);
 	}
 #endif	
@@ -862,7 +953,7 @@ static int linux_wlan_start_firmware(perInterface_wlan_t* nic){
 
 	/*TicketId908*/
 	/*Waiting for 500ms is much more enough for firmware to respond*/
-	if((ret = linux_wlan_lock_timeout(&g_linux_wlan->sync_event,800))) // 500
+	if((ret = linux_wlan_lock_timeout(&g_linux_wlan->sync_event,500)))
 	{
 		PRINT_D(INIT_DBG,"Firmware start timed out\n");
 		goto _fail_;
@@ -1358,7 +1449,7 @@ int wlan_init_locks(linux_wlan_t* p_nic){
 
 	linux_wlan_init_lock("rxq_lock/rxq_started",&g_linux_wlan->rxq_thread_started,0);
 	linux_wlan_init_lock("rxq_lock/txq_started",&g_linux_wlan->txq_thread_started,0);
-
+	linux_wlan_init_lock("wdt_lock/wdt_ended",&g_linux_wlan->wdt_thread_ended,0);
 	#if (RX_BH_TYPE == RX_BH_KTHREAD)
 		linux_wlan_init_lock("BH_SEM", &g_linux_wlan->rx_sem, 0);
 	#endif
@@ -1397,7 +1488,8 @@ static int wlan_deinit_locks(linux_wlan_t* nic){
 
 	if(&g_linux_wlan->txq_thread_started != NULL)
 		linux_wlan_deinit_lock(&g_linux_wlan->txq_thread_started);
-
+	if(&g_linux_wlan->wdt_thread_ended != NULL)
+		linux_wlan_deinit_lock(&g_linux_wlan->wdt_thread_ended);
 	if(&g_linux_wlan->cfg_event != NULL)
 		linux_wlan_deinit_lock(&g_linux_wlan->cfg_event);
 
@@ -1516,19 +1608,29 @@ int wlan_initialize_threads(perInterface_wlan_t* nic){
 		ret = -ENOBUFS;
 		goto _fail_2;
 	}
-#ifdef DEBUG_MODE
-	PRINT_D(INIT_DBG,"Creating kthread for Debugging\n");	
-	g_linux_wlan->txq_thread = kthread_run(DebuggingThreadTask,(void*)g_linux_wlan,"DebugThread");												
-	if(g_linux_wlan->txq_thread == 0){
-		PRINT_ER("couldn't create TXQ thread\n");
-		ret = -ENOBUFS;
-		goto _fail_2;
+#if 1
+	if(bDebugThreadRunning == 0)
+	{		
+		PRINT_D(INIT_DBG,"Creating kthread for Debugging\n");	
+		g_linux_wlan->wdt_thread= kthread_run(DebuggingThreadTask,(void*)g_linux_wlan,"DebugThread");												
+		if(g_linux_wlan->wdt_thread == 0){
+			PRINT_ER("couldn't create DebugThread\n");
+			ret = -ENOBUFS;
+			goto _fail_3;
+		}
+		bDebugThreadRunning = 1;
 	}
 #endif	
 	/* wait for TXQ task to start. */
 	linux_wlan_lock(&g_linux_wlan->txq_thread_started);
 	
 	return 0;
+
+	_fail_3:
+		/*De-Initialize 3rd thread*/
+		g_linux_wlan->close = 1;
+		linux_wlan_unlock(&g_linux_wlan->txq_event);
+		kthread_stop(g_linux_wlan->txq_thread);
 	
 	_fail_2:
 		/*De-Initialize 2nd thread*/
@@ -1549,7 +1651,20 @@ int wlan_initialize_threads(perInterface_wlan_t* nic){
 }
 
 static void wlan_deinitialize_threads(linux_wlan_t* nic){
-	
+
+		PRINT_D(INIT_DBG,"wlan_deinitalize_threads\n");
+	if(!gbCrashRecover){
+		PRINT_D(INIT_DBG,"Deinitializing debug Thread\n");
+		bDebugThreadRunning = 0;
+		if(&g_linux_wlan->wdt_thread_ended != NULL){
+			linux_wlan_unlock(&g_linux_wlan->wdt_thread_ended);
+		}
+		if(nic->wdt_thread != NULL){
+			kthread_stop(nic->wdt_thread);
+			nic->wdt_thread = NULL;			
+		}
+	}
+
 	g_linux_wlan->close = 1;
 	PRINT_D(INIT_DBG,"Deinitializing Threads\n");
 	
@@ -1709,12 +1824,15 @@ int wilc1000_wlan_init(struct net_device *dev,perInterface_wlan_t* p_nic, uint8_
 	perInterface_wlan_t* nic = p_nic;
 	int ret = 0;
 	static int timeout = 5;
+	static int pwr_cycle_trials = 5;
 	
 	if(!g_linux_wlan->wilc1000_initialized){
 		g_linux_wlan->mac_status = WILC_MAC_STATUS_INIT;	
 		g_linux_wlan->close = 0;
 		g_linux_wlan->wilc1000_initialized = 0;
 
+	do
+	{
 		if(power_up == 1){
 			at_pwr_power_up(PWR_DEV_SRC_WIFI);
 
@@ -1726,6 +1844,12 @@ int wilc1000_wlan_init(struct net_device *dev,perInterface_wlan_t* p_nic, uint8_
 			g_linux_wlan->wilc_spidev = wilc_spi_dev;
 		#endif
 		}
+		if(ret < 0)
+		{
+			at_pwr_power_down(PWR_DEV_SRC_WIFI);
+		}
+	}
+	while((ret < 0) && (pwr_cycle_trials-- >0));
 		
 		if(ret < 0)
 			return ret;
@@ -1785,7 +1909,8 @@ int wilc1000_wlan_init(struct net_device *dev,perInterface_wlan_t* p_nic, uint8_
 			goto _fail_irq_enable_;
 		}
 
-
+		pwr_cycle_trials = 5;
+		timeout = 5;
 		/*TicketId908*/
 		/*Keep trying to download+start firmware in case of failures*/
 		/*This to workaround problem of firmware startup being stucked somewhere in turing_on_rf_blocks*/
@@ -1795,11 +1920,23 @@ int wilc1000_wlan_init(struct net_device *dev,perInterface_wlan_t* p_nic, uint8_
 			ret = linux_wlan_firmware_download(g_linux_wlan);
 			if(ret < 0){
 				PRINT_ER("Failed to download firmware\n");
-				/* Freeing FW buffer */
-				linux_wlan_free_firmware();
 
 				ret = -EIO;
-				goto _fail_irq_enable_;
+				if(pwr_cycle_trials-- == 0){
+					/* Freeing FW buffer */
+					linux_wlan_free_firmware();
+					goto _fail_irq_enable_;
+				}
+				else{
+					acquire_bus(ACQUIRE_ONLY);
+					at_pwr_unregister_bus(PWR_DEV_SRC_WIFI);
+					at_pwr_power_down(PWR_DEV_SRC_WIFI);
+					WILC_Sleep(5);
+					at_pwr_power_up(PWR_DEV_SRC_WIFI);
+					at_pwr_register_bus(PWR_DEV_SRC_WIFI);
+					release_bus(RELEASE_ONLY, PWR_DEV_SRC_WIFI);
+					continue;
+				}
 			}
 
 			/* Start firmware*/
@@ -1810,9 +1947,19 @@ int wilc1000_wlan_init(struct net_device *dev,perInterface_wlan_t* p_nic, uint8_
 				if(timeout-- == 0)
 				{
 					timeout = 5;
-					/* Freeing FW buffer */
-					linux_wlan_free_firmware();
-					goto _fail_irq_enable_;
+					if(pwr_cycle_trials-- == 0){						
+						/* Freeing FW buffer */
+						linux_wlan_free_firmware();
+						goto _fail_irq_enable_;
+					}else{
+						acquire_bus(ACQUIRE_ONLY);
+						at_pwr_unregister_bus(PWR_DEV_SRC_WIFI);
+						at_pwr_power_down(PWR_DEV_SRC_WIFI);
+						WILC_Sleep(5);
+						at_pwr_power_up(PWR_DEV_SRC_WIFI);
+						at_pwr_register_bus(PWR_DEV_SRC_WIFI);
+						release_bus(RELEASE_ONLY, PWR_DEV_SRC_WIFI);
+					}
 				}
 			}
 		}while(ret== -EIO);
@@ -1943,12 +2090,19 @@ int mac_open(struct net_device *ndev){
 	printk("MAC OPEN[%p]\n",ndev);
 
 	#ifdef USE_WIRELESS
-	ret = WILC_WFI_InitHostInt(ndev);
-	if(ret < 0)
+	if(!gbCrashRecover)
 	{
+		ret = WILC_WFI_InitHostInt(ndev);
+		if(ret < 0)
+		{
 		PRINT_ER("Failed to initialize host interface\n");
 
 		return  ret;
+		}
+	}
+	else
+	{	
+	
 	}
 	#endif
 	
@@ -1963,6 +2117,8 @@ int mac_open(struct net_device *ndev){
 	}
 
 	Set_machw_change_vir_if(WILC_FALSE);
+
+	g_bWaitForRecovery = 0;	
 	
 	status = host_int_get_MacAddress(priv->hWILCWFIDrv, mac_add);
 	PRINT_D(INIT_DBG, "Mac address: %x:%x:%x:%x:%x:%x\n", mac_add[0], mac_add[1], mac_add[2],
@@ -1996,6 +2152,17 @@ int mac_open(struct net_device *ndev){
     	netif_wake_queue(ndev); 
  	g_linux_wlan->open_ifcs++;
 	nic->mac_opened=1;
+
+
+#ifdef PLAT_ALLWINNER_A31
+	/* A31 Opens the 2 interfaces only at the first time, then closes the STA interface only.
+		Then at the next switching ON, it will open the STA interface only.
+		However, mac_close closes both interfaces to deinit and power down the chip.
+		We need to automatically reopen the P2P interface.*/
+	if((g_linux_wlan->strInterfaceInfo[0].wilc_netdev== ndev) && 
+		((g_linux_wlan->open_ifcs) == 1) && g_linux_wlan->strInterfaceInfo[1].wilc_netdev != NULL)
+		mac_open(g_linux_wlan->strInterfaceInfo[1].wilc_netdev);
+#endif //PLAT_ALLWINNER_A31
     return 0;
 	
 _err_:
@@ -2282,10 +2449,12 @@ int mac_close(struct net_device *ndev)
 		netif_stop_queue(nic->wilc_netdev);
 			
 		#ifdef USE_WIRELESS
+	if(!gbCrashRecover)
 		WILC_WFI_DeInitHostInt(nic->wilc_netdev);
 		#endif
 	}
 
+	nic->mac_opened=0;
 	if(g_linux_wlan->open_ifcs==0)
 	{	
 		PRINT_D(GENERIC_DBG,"Deinitializing wilc1000\n");
@@ -2299,14 +2468,14 @@ int mac_close(struct net_device *ndev)
 	}
 	else
 	{
+	#ifdef PLAT_ALLWINNER_A31
 		/* A31 don't call mac_close for the p2p interface.
 			when the module was removed, all interfaces were mac_closed.
 			Have to simulate that
 		*/
-		g_linux_wlan->exit_thread = kthread_run(exit_func,(void*)g_linux_wlan,"K_EXIT_TASK");
+		exit_func(g_linux_wlan);
+	#endif
 	}
-	linux_wlan_unlock(&close_exit_sync);	
-	nic->mac_opened=0;
 	
 	return 0;
 }
@@ -2756,12 +2925,6 @@ static int exit_func(void* data)
 	
 	{
 		PRINT_D(INIT_DBG,"Waiting for mac_close ....\n");
-
-		if(linux_wlan_lock_timeout(&close_exit_sync, CLOSE_TIMEOUT) < 0)
-			PRINT_D(INIT_DBG,"Closed TimedOUT\n");
-		else
-			PRINT_D(INIT_DBG,"mac_closed\n");	
-
 		
 		for(i=0;i<NUM_CONCURRENT_IFC;i++)
 		{	

@@ -260,11 +260,12 @@ typedef struct{
 	
 	struct semaphore rxq_thread_started;
 	struct semaphore txq_thread_started;
+	struct semaphore wdt_thread_ended;
 
 	struct task_struct* rxq_thread;
 	struct task_struct* txq_thread;
-
-	struct task_struct* exit_thread;
+	
+	struct task_struct* wdt_thread;
 
 	unsigned char eth_src_address[NUM_CONCURRENT_IFC][6];
 	//unsigned char eth_dst_address[6];
