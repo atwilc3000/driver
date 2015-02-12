@@ -2438,9 +2438,10 @@ int mac_close(struct net_device *ndev)
     		return 0;
     	}
 		
-	if((g_linux_wlan->open_ifcs)>0)
+	if((g_linux_wlan->open_ifcs)>0) {
  		g_linux_wlan->open_ifcs--;	
 		printk("mac_close: g_linux_wlan->open_ifcs=%d\n", g_linux_wlan->open_ifcs);
+	}
 	else
 	{
 		printk("ERROR: MAC close called while number of opened interfaces is zero\n");
