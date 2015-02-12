@@ -36,7 +36,7 @@
 #include <linux/semaphore.h>
 
 /* define the driver version, tony */
-#include "gitversion.h"	
+#include "svnrevision.h"	
 
 #ifdef WILC_SDIO
 #include "linux_wlan_sdio.h"
@@ -898,7 +898,8 @@ int linux_wlan_get_firmware(perInterface_wlan_t* p_nic){
 	
 	/*	the firmare should be located in /lib/firmware in 
 		root file system with the name specified above */
-
+	printk("WLAN firmware: %s\n", firmware);
+	printk("[linux_wlan.c] Bluetooth firmware: %s\n", BT_FIRMWARE);
 #ifdef WILC_SDIO
 	if( request_firmware(&wilc_firmware,firmware, dev) != 0){
 		PRINT_ER("%s - firmare not available\n",firmware);
@@ -1341,7 +1342,7 @@ void wilc1000_wlan_deinit(linux_wlan_t *nic, uint8_t power_down) {
 			return;
 		}
 
-#if defined(PLAT_ALLWINNER_A20) || defined(PLAT_ALLWINNER_A23) || defined(PLAT_ALLWINNER_A31)
+#if defined(PLAT_ALLWINNER_A20) || defined(PLAT_ALLWINNER_A23) || defined(PLAT_ALLWINNER_A31) || defined(SAMA5D4)
 		// johnny : remove
 		PRINT_D(INIT_DBG,"skip wilc_bus_set_default_speed\n");
 #else
@@ -1352,7 +1353,7 @@ void wilc1000_wlan_deinit(linux_wlan_t *nic, uint8_t power_down) {
 		#if (!defined WILC_SDIO) || (defined WILC_SDIO_IRQ_GPIO)
 			linux_wlan_disable_irq(IRQ_WAIT);
 		#else			
-		  #if defined(PLAT_ALLWINNER_A20) || defined(PLAT_ALLWINNER_A23) || defined(PLAT_ALLWINNER_A31)
+		  #if defined(PLAT_ALLWINNER_A20) || defined(PLAT_ALLWINNER_A23) || defined(PLAT_ALLWINNER_A31) || defined(SAMA5D4)
 
 		  #else
 			linux_wlan_lock_mutex((void*)&g_linux_wlan->hif_cs);
@@ -1397,7 +1398,7 @@ void wilc1000_wlan_deinit(linux_wlan_t *nic, uint8_t power_down) {
 	PRINT_D(INIT_DBG,"Deinitializing WILC Wlan\n");
 	wilc_wlan_deinit(nic);			
 #if (defined WILC_SDIO) && (!defined WILC_SDIO_IRQ_GPIO)
- #if defined(PLAT_ALLWINNER_A20) || defined(PLAT_ALLWINNER_A23) || defined(PLAT_ALLWINNER_A31)
+ #if defined(PLAT_ALLWINNER_A20) || defined(PLAT_ALLWINNER_A23) || defined(PLAT_ALLWINNER_A31) || defined(SAMA5D4)
     PRINT_D(INIT_DBG,"Disabling IRQ 2\n");
 
     linux_wlan_lock_mutex((void*)g_linux_wlan->hif_cs);
@@ -2151,14 +2152,16 @@ int mac_open(struct net_device *ndev){
            						nic->g_struct_frame_reg[1].frame_type,nic->g_struct_frame_reg[1].reg);
     	netif_wake_queue(ndev); 
  	g_linux_wlan->open_ifcs++;
+	printk("mac_open: g_linux_wlan->open_ifcs=%d\n", g_linux_wlan->open_ifcs);
 	nic->mac_opened=1;
 
 
-#ifdef PLAT_ALLWINNER_A31
+#if defined(PLAT_ALLWINNER_A31) || defined(SAMA5D4)
 	/* A31 Opens the 2 interfaces only at the first time, then closes the STA interface only.
 		Then at the next switching ON, it will open the STA interface only.
 		However, mac_close closes both interfaces to deinit and power down the chip.
 		We need to automatically reopen the P2P interface.*/
+	printk("mac_open: check ifcs\n");
 	if((g_linux_wlan->strInterfaceInfo[0].wilc_netdev== ndev) && 
 		((g_linux_wlan->open_ifcs) == 1) && g_linux_wlan->strInterfaceInfo[1].wilc_netdev != NULL)
 		mac_open(g_linux_wlan->strInterfaceInfo[1].wilc_netdev);
@@ -2437,6 +2440,7 @@ int mac_close(struct net_device *ndev)
 		
 	if((g_linux_wlan->open_ifcs)>0)
  		g_linux_wlan->open_ifcs--;	
+		printk("mac_close: g_linux_wlan->open_ifcs=%d\n", g_linux_wlan->open_ifcs);
 	else
 	{
 		printk("ERROR: MAC close called while number of opened interfaces is zero\n");
@@ -2468,11 +2472,12 @@ int mac_close(struct net_device *ndev)
 	}
 	else
 	{
-	#ifdef PLAT_ALLWINNER_A31
+	#if defined(PLAT_ALLWINNER_A31) || defined(SAMA5D4)
 		/* A31 don't call mac_close for the p2p interface.
 			when the module was removed, all interfaces were mac_closed.
 			Have to simulate that
 		*/
+		printk("mac_close: call exit_func\n");
 		exit_func(g_linux_wlan);
 	#endif
 	}
@@ -2890,7 +2895,7 @@ static int __init init_wilc_driver(void){
 #endif
 	printk("IN INIT FUNCTION NEW TRUNK\n");
 	/* driver version in Makefile */
-	printk("*** WILC3000 driver VERSION=[%s], fw VERSION=[%s], REVISON=[%s] ***\n", __DRIVER_VERSION__, __FW_VERSION__, GITSHA);
+	printk("*** WILC3000 driver VERSION=[%s], fw VERSION=[%s], REVISON=[%s] ***\n", __DRIVER_VERSION__, __FW_VERSION__, SVNREV);
 
 	PRINT_D(INIT_DBG,"Initializing netdev\n");
 	if(wilc_netdev_init()){

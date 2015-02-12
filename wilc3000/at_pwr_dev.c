@@ -897,7 +897,7 @@ static int wilc_bt_firmware_download(void)
 	uint8_t *buffer;
 	size_t buffer_size;
 	
-
+	printk("[at_pwr_dev.c] Bluetooth firmware: %s\n", BT_FIRMWARE);
 #ifdef WILC_SDIO
 	if( request_firmware(&wilc_bt_firmware,BT_FIRMWARE, dev) != 0){
 		PRINT_ER("%s - firmare not available. Skip!\n",BT_FIRMWARE);

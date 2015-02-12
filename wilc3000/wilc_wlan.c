@@ -1699,7 +1699,7 @@ static int wilc_bt_firmware_download(const uint8_t *buffer, uint32_t buffer_size
 			memcpy(dma_buffer, &buffer[offset], size2);
 			ret = p->hif_func.hif_block_tx(addr, dma_buffer, size2);
 			if (!ret) break;
-		#ifdef PLAT_ALLWINNER_A31
+		#if defined(PLAT_ALLWINNER_A31) || defined(SAMA5D4)
 		// Ticket #878: delay after the block tx, or else the FW will be downloaded corrupted in the IRAM
 		// for an unknown reason
 			p->os_func.os_atomic_sleep(1);
