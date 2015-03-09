@@ -39,12 +39,7 @@
 /*****************************************************************************/
 /*								Macros										 */
 /*****************************************************************************/ 
-#define DOWNLOAD_BT_FW_ONCE
-#ifdef DOWNLOAD_BT_FW
-#ifndef BT_FIRMWARE
-#define BT_FIRMWARE		"bt_firmware.bin"
-#endif
-#endif
+//#define DOWNLOAD_BT_FW_ONCE
 
 /*****************************************************************************/
 /*								Externs										 */

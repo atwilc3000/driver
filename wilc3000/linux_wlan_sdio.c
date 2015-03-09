@@ -21,6 +21,8 @@
 #define MAX_SPEED 45000000 //40000000 //50000000
 #elif defined (PLAT_ALLWINNER_A31)
 #define MAX_SPEED 50000000
+#elif defined (SAMA5D4)
+#define MAX_SPEED 40000000
 #else
 #define MAX_SPEED 50000000
 #endif
@@ -215,7 +217,6 @@ void disable_sdio_interrupt(void){
 
 static int linux_sdio_set_speed(int speed)
 {
-#if 1
 	struct mmc_ios ios;
 	sdio_claim_host(local_sdio_func);
 	
@@ -225,7 +226,7 @@ static int linux_sdio_set_speed(int speed)
 	local_sdio_func->card->host->ops->set_ios(local_sdio_func->card->host,&ios);
 	sdio_release_host(local_sdio_func);
 	PRINT_D(INIT_DBG,"@@@@@@@@@@@@ change SDIO speed to %d @@@@@@@@@\n", speed);
-#endif
+
 	return 1;
 }
 

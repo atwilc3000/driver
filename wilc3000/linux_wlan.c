@@ -35,9 +35,6 @@
 #include <linux/version.h>
 #include <linux/semaphore.h>
 
-/* define the driver version, tony */
-#include "svnrevision.h"	
-
 #ifdef WILC_SDIO
 #include "linux_wlan_sdio.h"
 #include <linux/mmc/host.h>
@@ -898,8 +895,7 @@ int linux_wlan_get_firmware(perInterface_wlan_t* p_nic){
 	
 	/*	the firmare should be located in /lib/firmware in 
 		root file system with the name specified above */
-	printk("WLAN firmware: %s\n", firmware);
-	printk("[linux_wlan.c] Bluetooth firmware: %s\n", BT_FIRMWARE);
+	printk("[linux_wlan.c] WLAN firmware: %s\n", firmware);
 #ifdef WILC_SDIO
 	if( request_firmware(&wilc_firmware,firmware, dev) != 0){
 		PRINT_ER("%s - firmare not available\n",firmware);
@@ -907,6 +903,7 @@ int linux_wlan_get_firmware(perInterface_wlan_t* p_nic){
 		goto _fail_;
 	}
 #ifdef DOWNLOAD_BT_FW
+	printk("[linux_wlan.c] Bluetooth firmware: %s\n", BT_FIRMWARE);
 	if( request_firmware(&wilc_bt_firmware,BT_FIRMWARE, dev) != 0){
 		PRINT_ER("%s - firmare not available. Skip!\n",firmware);
 	}
@@ -918,6 +915,7 @@ int linux_wlan_get_firmware(perInterface_wlan_t* p_nic){
 		goto _fail_;
 	}
 #ifdef DOWNLOAD_BT_FW
+	printk("[linux_wlan.c] Bluetooth firmware: %s\n", BT_FIRMWARE);
 	if( request_firmware(&wilc_bt_firmware,BT_FIRMWARE, &dev) != 0){
 		PRINT_ER("%s - firmare not available. Skip\n",BT_FIRMWARE);
 	}
@@ -2438,7 +2436,7 @@ int mac_close(struct net_device *ndev)
     		return 0;
     	}
 		
-	if((g_linux_wlan->open_ifcs)>0) {
+	if((g_linux_wlan->open_ifcs)>0){
  		g_linux_wlan->open_ifcs--;	
 		printk("mac_close: g_linux_wlan->open_ifcs=%d\n", g_linux_wlan->open_ifcs);
 	}
@@ -2894,9 +2892,9 @@ static int __init init_wilc_driver(void){
 		return -1;
 	}
 #endif
-	printk("IN INIT FUNCTION NEW TRUNK\n");
+
 	/* driver version in Makefile */
-	printk("*** WILC3000 driver VERSION=[%s], fw VERSION=[%s], REVISON=[%s] ***\n", __DRIVER_VERSION__, __FW_VERSION__, SVNREV);
+	printk("*** WILC3000 driver VERSION=[%s], fw VERSION=[%s] ***\n", __DRIVER_VERSION__, __FW_VERSION__);
 
 	PRINT_D(INIT_DBG,"Initializing netdev\n");
 	if(wilc_netdev_init()){
