@@ -1,6 +1,5 @@
 menuconfig ATMEL_SMARTCONNECT
     bool "Atmel SmartConnect wireless cards Driver"
-    depends on CFG80211
 
     ---help---
       This module adds support for the Atmel wireless drivers.
