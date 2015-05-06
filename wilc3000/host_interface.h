@@ -10,8 +10,10 @@
 #ifndef HOST_INT_H
 #define HOST_INT_H
 
-#include "coreconfigurator.h"
-#include "coreconfigsimulator.h"
+#include "core_configurator.h"
+#ifdef SIMULATION
+#include "core_config_simulator.h"
+#endif //SIMULATION
 /*****************************************************************************/
 /*								Macros                                       */
 /*****************************************************************************/
@@ -98,9 +100,9 @@
 #define PMKSA_KEY_LEN				22
 #define ETH_ALEN  6
 #define PMKID_LEN  					16
-#define WILC_MAX_NUM_PMKIDS  16
-#define WILC_SUPP_MCS_SET_SIZE	16
-#define WILC_ADD_STA_LENGTH	40 /* Not including the rates field cause it has variable length*/
+#define AT_MAX_NUM_PMKIDS  16
+#define ATWILC_SUPP_MCS_SET_SIZE	16
+#define ATWILC_ADD_STA_LENGTH	40 /* Not including the rates field cause it has variable length*/
 #define SCAN_EVENT_DONE_ABORTED 
 /*****************************************************************************/
 /* Data Types                                                                */
@@ -124,18 +126,18 @@ typedef enum {WID_CHAR  = 0,
 #endif
 typedef struct
 {
-    WILC_Uint16     cfg_wid;
+    ATL_Uint16     cfg_wid;
     WID_TYPE_T	  cfg_type;
-    WILC_Sint8     *pu8Para;
+    ATL_Sint8     *pu8Para;
 } cfg_param_t;
 
 typedef struct _tstrStatistics
 {
-	WILC_Uint8 	u8LinkSpeed;
-	WILC_Sint8	s8RSSI;
-	WILC_Uint32 	u32TxCount;
-	WILC_Uint32 	u32RxCount;
-	WILC_Uint32 	u32TxFailureCount;
+	ATL_Uint8 	u8LinkSpeed;
+	ATL_Sint8	s8RSSI;
+	ATL_Uint32 	u32TxCount;
+	ATL_Uint32 	u32RxCount;
+	ATL_Uint32 	u32TxFailureCount;
 	
 }tstrStatistics;
 
@@ -153,14 +155,14 @@ typedef enum
 
 typedef struct _tstrHostIFpmkid
 {
-	WILC_Uint8 bssid[ETH_ALEN];
-	WILC_Uint8 pmkid[PMKID_LEN];
+	ATL_Uint8 bssid[ETH_ALEN];
+	ATL_Uint8 pmkid[PMKID_LEN];
 }tstrHostIFpmkid;
 
 typedef struct _tstrHostIFpmkidAttr
 {
-	WILC_Uint8 numpmkid;
-	tstrHostIFpmkid pmkidlist[WILC_MAX_NUM_PMKIDS];
+	ATL_Uint8 numpmkid;
+	tstrHostIFpmkid pmkidlist[AT_MAX_NUM_PMKIDS];
 }tstrHostIFpmkidAttr;
 #if 0
 /* Scan type parameter for scan request */
@@ -194,26 +196,26 @@ typedef enum{AUTORATE	= 0,
 
 typedef struct
 {
-	WILC_Uint32 u32SetCfgFlag;
-	WILC_Uint8 ht_enable;
-	WILC_Uint8 bss_type;
-	WILC_Uint8 auth_type;
-	WILC_Uint16 auth_timeout;
-	WILC_Uint8 power_mgmt_mode;
-	WILC_Uint16 short_retry_limit;
-	WILC_Uint16 long_retry_limit;
-	WILC_Uint16 frag_threshold;
-	WILC_Uint16 rts_threshold;
-	WILC_Uint16 preamble_type;
-	WILC_Uint8 short_slot_allowed;
-	WILC_Uint8 txop_prot_disabled;
-	WILC_Uint16 beacon_interval;
-	WILC_Uint16 dtim_period;
+	ATL_Uint32 u32SetCfgFlag;
+	ATL_Uint8 ht_enable;
+	ATL_Uint8 bss_type;
+	ATL_Uint8 auth_type;
+	ATL_Uint16 auth_timeout;
+	ATL_Uint8 power_mgmt_mode;
+	ATL_Uint16 short_retry_limit;
+	ATL_Uint16 long_retry_limit;
+	ATL_Uint16 frag_threshold;
+	ATL_Uint16 rts_threshold;
+	ATL_Uint16 preamble_type;
+	ATL_Uint8 short_slot_allowed;
+	ATL_Uint8 txop_prot_disabled;
+	ATL_Uint16 beacon_interval;
+	ATL_Uint16 dtim_period;
 	SITE_SURVEY_T site_survey_enabled;
-	WILC_Uint16 site_survey_scan_time;
-	WILC_Uint8 scan_source;
-	WILC_Uint16 active_scan_time;
-	WILC_Uint16 passive_scan_time;
+	ATL_Uint16 site_survey_scan_time;
+	ATL_Uint8 scan_source;
+	ATL_Uint16 active_scan_time;
+	ATL_Uint16 passive_scan_time;
 	CURRENT_TX_RATE_T curr_tx_rate;
 
 }tstrCfgParamVal;
@@ -242,8 +244,8 @@ typedef enum {
 
 typedef struct
 {
-	WILC_Uint8 au8bssid[6];
-	WILC_Sint8 s8rssi;
+	ATL_Uint8 au8bssid[6];
+	ATL_Sint8 s8rssi;
 }tstrFoundNetworkInfo;
 
 typedef enum {SCAN_EVENT_NETWORK_FOUND  = 0,
@@ -270,26 +272,29 @@ typedef enum
 
 
 /*Scan callBack function definition*/
-typedef void(*tWILCpfScanResult)(tenuScanEvent, tstrNetworkInfo*, void*,void*);
+typedef void(*tATWILCpfScanResult)(tenuScanEvent, tstrNetworkInfo*, void*,void*);
 
 /*Connect callBack function definition*/
-typedef void(*tWILCpfConnectResult)(tenuConnDisconnEvent, 
+typedef void(*tATWILCpfConnectResult)(tenuConnDisconnEvent, 
 									tstrConnectInfo*, 
-									WILC_Uint8, 
+									ATL_Uint8, 
 									tstrDisconnectNotifInfo*, 
 									void*);
 
-#ifdef WILC_P2P
-typedef void(*tWILCpfRemainOnChanExpired)(void*, WILC_Uint32);	/*Remain on channel expiration callback function*/
-typedef void(*tWILCpfRemainOnChanReady)(void*);	/*Remain on channel callback function*/
+#ifdef ATWILC_P2P
+typedef void(*tATWILCpfRemainOnChanExpired)(void*, ATL_Uint32);	/*Remain on channel expiration callback function*/
+typedef void(*tATWILCpfRemainOnChanReady)(void*);	/*Remain on channel callback function*/
 #endif
 
-//typedef WILC_Uint32 WILC_WFIDrvHandle;
+typedef void(*tATWILCpfFrmToLinux)(ATL_Uint8*, ATL_Uint32, ATL_Uint32);
+typedef void(*tATWILCpfFreeEAPBuffParams)(void*);
+
+//typedef ATL_Uint32 ATWILC_WFIDrvHandle;
 typedef struct
 {
-	WILC_Sint32 s32Dummy;
+	ATL_Sint32 s32Dummy;
 }
-*WILC_WFIDrvHandle;
+*ATWILC_WFIDrvHandle;
 
 /*!
 *  @struct 		tstrRcvdNetworkInfo
@@ -303,15 +308,15 @@ typedef struct
 */
 typedef struct _tstrRcvdNetworkInfo
 {
-	WILC_Uint8* pu8Buffer;
-	WILC_Uint32 u32Length;
+	ATL_Uint8* pu8Buffer;
+	ATL_Uint32 u32Length;
 } tstrRcvdNetworkInfo;
 
 /*BugID_4156*/
 typedef struct _tstrHiddenNetworkInfo
 {
-	WILC_Uint8  *pu8ssid;
-	WILC_Uint8  u8ssidlen;
+	ATL_Uint8  *pu8ssid;
+	ATL_Uint8  u8ssidlen;
 	
 }tstrHiddenNetworkInfo;
 
@@ -319,86 +324,86 @@ typedef struct _tstrHiddenNetwork
 {
   //MAX_SSID_LEN
 	tstrHiddenNetworkInfo *pstrHiddenNetworkInfo;
-  	WILC_Uint8  u8ssidnum;
+  	ATL_Uint8  u8ssidnum;
 	
 } tstrHiddenNetwork;
 
 typedef struct
 {		
 	/* Scan user call back function */
-	tWILCpfScanResult	pfUserScanResult;
+	tATWILCpfScanResult	pfUserScanResult;
 
 	/* User specific parameter to be delivered through the Scan User Callback function */
 	void* u32UserScanPvoid;
 
-	WILC_Uint32 u32RcvdChCount;
+	ATL_Uint32 u32RcvdChCount;
 	tstrFoundNetworkInfo astrFoundNetworkInfo[MAX_NUM_SCANNED_NETWORKS];	
-}tstrWILC_UsrScanReq;
+}tstrATWILC_UsrScanReq;
 
 typedef struct
 {
-	WILC_Uint8* pu8bssid;
-	WILC_Uint8* pu8ssid;
-	WILC_Uint8 u8security;
+	ATL_Uint8* pu8bssid;
+	ATL_Uint8* pu8ssid;
+	ATL_Uint8 u8security;
 	AUTHTYPE_T tenuAuth_type;
 	size_t ssidLen;
-	WILC_Uint8* pu8ConnReqIEs;
+	ATL_Uint8* pu8ConnReqIEs;
 	size_t ConnReqIEsLen;
 	/* Connect user call back function */
-	tWILCpfConnectResult	pfUserConnectResult;
-	WILC_Bool	IsHTCapable;
+	tATWILCpfConnectResult	pfUserConnectResult;
+	ATL_Bool	IsHTCapable;
 	/* User specific parameter to be delivered through the Connect User Callback function */
 	void* u32UserConnectPvoid;
-}tstrWILC_UsrConnReq;
+}tstrATWILC_UsrConnReq;
 
 typedef struct
 {
-	WILC_Uint32	u32Address;
+	ATL_Uint32	u32Address;
 }tstrHostIfSetDrvHandler;
 
 typedef struct
 {
-	WILC_Uint32	u32Mode;
+	ATL_Uint32	u32Mode;
 }tstrHostIfSetOperationMode;
 
 /*BugID_5077*/
 typedef struct
 {
-	WILC_Uint8	u8MacAddress[ETH_ALEN];
+	ATL_Uint8	u8MacAddress[ETH_ALEN];
 }tstrHostIfSetMacAddress;
 
 /*BugID_5213*/
 typedef struct
 {
-	WILC_Uint8*	u8MacAddress;
+	ATL_Uint8*	u8MacAddress;
 }tstrHostIfGetMacAddress;
 
 /*BugID_5222*/
 typedef struct
 {
-	WILC_Uint8	au8Bssid[ETH_ALEN];
-	WILC_Uint8	u8Ted;
-	WILC_Uint16	u16BufferSize;
-	WILC_Uint16	u16SessionTimeout;
+	ATL_Uint8	au8Bssid[ETH_ALEN];
+	ATL_Uint8	u8Ted;
+	ATL_Uint16	u16BufferSize;
+	ATL_Uint16	u16SessionTimeout;
 }tstrHostIfBASessionInfo;
 
-#ifdef WILC_P2P
+#ifdef ATWILC_P2P
 typedef struct
 {
-	WILC_Uint16     u16Channel;
-	WILC_Uint32  u32duration;
-	tWILCpfRemainOnChanExpired pRemainOnChanExpired;
-	tWILCpfRemainOnChanReady pRemainOnChanReady;
+	ATL_Uint16     u16Channel;
+	ATL_Uint32  u32duration;
+	tATWILCpfRemainOnChanExpired pRemainOnChanExpired;
+	tATWILCpfRemainOnChanReady pRemainOnChanReady;
 	void *  pVoid;
-	WILC_Uint32 u32ListenSessionID;
+	ATL_Uint32 u32ListenSessionID;
 }tstrHostIfRemainOnChan;
 
 typedef struct
 {
 
-WILC_Bool        bReg;
-WILC_Uint16     u16FrameType;
-WILC_Uint8       u8Regid;
+ATL_Bool        bReg;
+ATL_Uint16     u16FrameType;
+ATL_Uint8       u8Regid;
 
 
 }tstrHostIfRegisterFrame;
@@ -421,55 +426,55 @@ enum p2p_listen_state
 typedef struct
 {
 	/* Scan user structure */
-	tstrWILC_UsrScanReq strWILC_UsrScanReq;
+	tstrATWILC_UsrScanReq strATWILC_UsrScanReq;
 	
 	/* Connect User structure */
-	tstrWILC_UsrConnReq strWILC_UsrConnReq;
+	tstrATWILC_UsrConnReq strATWILC_UsrConnReq;
 
-	#ifdef WILC_P2P
+	#ifdef ATWILC_P2P
 	/*Remain on channel struvture*/
 	tstrHostIfRemainOnChan strHostIfRemainOnChan;
-	WILC_Uint8 u8RemainOnChan_pendingreq;
-	WILC_Uint64 u64P2p_MgmtTimeout;
-	WILC_Uint8   u8P2PConnect;
+	ATL_Uint8 u8RemainOnChan_pendingreq;
+	ATL_Uint64 u64P2p_MgmtTimeout;
+	ATL_Uint8   u8P2PConnect;
 	#endif
 
 	tenuHostIFstate enuHostIFstate;
 
-	//WILC_Bool bPendingConnRequest;
+	//ATL_Bool bPendingConnRequest;
 
 	#ifndef CONNECT_DIRECT
-	WILC_Uint32 u32SurveyResultsCount;
+	ATL_Uint32 u32SurveyResultsCount;
 	wid_site_survey_reslts_s astrSurveyResults[MAX_NUM_SCANNED_NETWORKS];
 	#endif
 	
-	WILC_Uint8 au8AssociatedBSSID[ETH_ALEN];
+	ATL_Uint8 au8AssociatedBSSID[ETH_ALEN];
 	tstrCfgParamVal strCfgValues;
 //semaphores
-	WILC_SemaphoreHandle gtOsCfgValuesSem;
-	WILC_SemaphoreHandle hSemTestKeyBlock;
+	ATL_SemaphoreHandle gtOsCfgValuesSem;
+	ATL_SemaphoreHandle hSemTestKeyBlock;
 	
-	WILC_SemaphoreHandle hSemTestDisconnectBlock;
-	WILC_SemaphoreHandle hSemGetRSSI;
-	WILC_SemaphoreHandle hSemGetLINKSPEED;
-	WILC_SemaphoreHandle hSemGetCHNL;
-	WILC_SemaphoreHandle hSemInactiveTime;
+	ATL_SemaphoreHandle hSemTestDisconnectBlock;
+	ATL_SemaphoreHandle hSemGetRSSI;
+	ATL_SemaphoreHandle hSemGetLINKSPEED;
+	ATL_SemaphoreHandle hSemGetCHNL;
+	ATL_SemaphoreHandle hSemInactiveTime;
 //timer handlers
-	WILC_TimerHandle hScanTimer;
-	WILC_TimerHandle hConnectTimer;
-	#ifdef WILC_P2P
-	WILC_TimerHandle hRemainOnChannel;
+	ATL_TimerHandle hScanTimer;
+	ATL_TimerHandle hConnectTimer;
+	#ifdef ATWILC_P2P
+	ATL_TimerHandle hRemainOnChannel;
 	#endif
 
-	WILC_Bool IFC_UP;
-}tstrWILC_WFIDrv;
+	ATL_Bool IFC_UP;
+}tstrATWILC_WFIDrv;
 
 /*!
-*  @enum 		tenuWILC_StaFlag
-*  @brief			Used to decode the station flag set and mask in tstrWILC_AddStaParam
+*  @enum 		tenuATWILC_StaFlag
+*  @brief			Used to decode the station flag set and mask in tstrATWILC_AddStaParam
 *  @details		
 *  @todo		
-*  @sa			tstrWILC_AddStaParam, enum nl80211_sta_flags
+*  @sa			tstrATWILC_AddStaParam, enum nl80211_sta_flags
 *  @author		Enumeraion's creator
 *  @date			12 July 2012
 *  @version		1.0 Description
@@ -477,32 +482,32 @@ typedef struct
 
 typedef enum
 {
-	WILC_STA_FLAG_INVALID = 0,
-	WILC_STA_FLAG_AUTHORIZED,			/*!<  station is authorized (802.1X)*/
-	WILC_STA_FLAG_SHORT_PREAMBLE,	/*!< station is capable of receiving frames	with short barker preamble*/
-	WILC_STA_FLAG_WME,				/*!< station is WME/QoS capable*/
-	WILC_STA_FLAG_MFP,					/*!< station uses management frame protection*/
-	WILC_STA_FLAG_AUTHENTICATED		/*!< station is authenticated*/
-}tenuWILC_StaFlag;
+	ATWILC_STA_FLAG_INVALID = 0,
+	ATWILC_STA_FLAG_AUTHORIZED,			/*!<  station is authorized (802.1X)*/
+	ATWILC_STA_FLAG_SHORT_PREAMBLE,	/*!< station is capable of receiving frames	with short barker preamble*/
+	ATWILC_STA_FLAG_WME,				/*!< station is WME/QoS capable*/
+	ATWILC_STA_FLAG_MFP,					/*!< station uses management frame protection*/
+	ATWILC_STA_FLAG_AUTHENTICATED		/*!< station is authenticated*/
+}tenuATWILC_StaFlag;
 
 typedef struct
 {
-	WILC_Uint8 au8BSSID[ETH_ALEN];
-	WILC_Uint16 u16AssocID;
-	WILC_Uint8 u8NumRates;
-	WILC_Uint8* pu8Rates;
-	WILC_Bool bIsHTSupported;
-	WILC_Uint16 u16HTCapInfo;
-	WILC_Uint8 u8AmpduParams;
-	WILC_Uint8 au8SuppMCsSet[16];
-	WILC_Uint16 u16HTExtParams;
-	WILC_Uint32 u32TxBeamformingCap;
-	WILC_Uint8 u8ASELCap;
-	WILC_Uint16 u16FlagsMask;		/*<! Determines which of u16FlagsSet were changed>*/
-	WILC_Uint16 u16FlagsSet;		/*<! Decoded according to tenuWILC_StaFlag */
-}tstrWILC_AddStaParam;
+	ATL_Uint8 au8BSSID[ETH_ALEN];
+	ATL_Uint16 u16AssocID;
+	ATL_Uint8 u8NumRates;
+	ATL_Uint8* pu8Rates;
+	ATL_Bool bIsHTSupported;
+	ATL_Uint16 u16HTCapInfo;
+	ATL_Uint8 u8AmpduParams;
+	ATL_Uint8 au8SuppMCsSet[16];
+	ATL_Uint16 u16HTExtParams;
+	ATL_Uint32 u32TxBeamformingCap;
+	ATL_Uint8 u8ASELCap;
+	ATL_Uint16 u16FlagsMask;		/*<! Determines which of u16FlagsSet were changed>*/
+	ATL_Uint16 u16FlagsSet;		/*<! Decoded according to tenuATWILC_StaFlag */
+}tstrATWILC_AddStaParam;
 
-//extern void CfgDisconnected(void* pUserVoid, WILC_Uint16 u16reason, WILC_Uint8 * ie, size_t ie_len);
+//extern void CfgDisconnected(void* pUserVoid, ATL_Uint16 u16reason, ATL_Uint8 * ie, size_t ie_len);
 
 /*****************************************************************************/
 /*																			 */
@@ -510,6 +515,25 @@ typedef struct
 /*																			 */
 /*****************************************************************************/
 
+/**
+*  @brief 			host_int_send_buffered_eap
+*  @details 		Sends a buffered eap to WPAS
+*  @param[in,out] handle to the wifi driver,
+*  @param[in]		pointer to frm_to_linux function
+				eapol buffer
+				size
+				packet offset
+				priv
+*  @return 		Error code indicating success/failure
+*  @note 		
+*  @author		aabdelmoghny
+*  @date			26 March 2015
+*  @version		1.0
+*/ 
+ATL_Sint32 host_int_send_buffered_eap(ATWILC_WFIDrvHandle hWFIDrv, tATWILCpfFrmToLinux pfFrmToLinux
+											, tATWILCpfFreeEAPBuffParams pfFreeEAPBuffParams
+											, ATL_Uint8* pu8Buff, ATL_Uint32 u32Size, ATL_Uint32 u32PktOffset
+											, void* pvUserArg);
 /**
 *  @brief 		removes wpa/wpa2 keys
 *  @details 	only in BSS STA mode if External Supplicant support is enabled. 
@@ -522,7 +546,7 @@ typedef struct
 *  @date		8 March 2012
 *  @version		1.0
 */
-WILC_Sint32 host_int_remove_key(WILC_WFIDrvHandle hWFIDrv,const WILC_Uint8* pu8StaAddress);
+ATL_Sint32 host_int_remove_key(ATWILC_WFIDrvHandle hWFIDrv,const ATL_Uint8* pu8StaAddress);
 /**
 *  @brief 		removes WEP key
 *  @details 	valid only in BSS STA mode if External Supplicant support is enabled.
@@ -537,7 +561,7 @@ WILC_Sint32 host_int_remove_key(WILC_WFIDrvHandle hWFIDrv,const WILC_Uint8* pu8S
 *  @date		8 March 2012
 *  @version		1.0
 */
-WILC_Sint32 host_int_remove_wep_key(WILC_WFIDrvHandle hWFIDrv,WILC_Uint8 u8Index);
+ATL_Sint32 host_int_remove_wep_key(ATWILC_WFIDrvHandle hWFIDrv,ATL_Uint8 u8Index);
 /**
 *  @brief 		sets WEP deafault key
 *  @details 	Sets the index of the WEP encryption key in use, 
@@ -550,7 +574,7 @@ WILC_Sint32 host_int_remove_wep_key(WILC_WFIDrvHandle hWFIDrv,WILC_Uint8 u8Index
 *  @date		8 March 2012
 *  @version		1.0
 */
-WILC_Sint32 host_int_set_WEPDefaultKeyID(WILC_WFIDrvHandle hWFIDrv,WILC_Uint8 u8Index);
+ATL_Sint32 host_int_set_WEPDefaultKeyID(ATWILC_WFIDrvHandle hWFIDrv,ATL_Uint8 u8Index);
 
 /**
 *  @brief 		sets WEP deafault key
@@ -571,7 +595,7 @@ WILC_Sint32 host_int_set_WEPDefaultKeyID(WILC_WFIDrvHandle hWFIDrv,WILC_Uint8 u8
 *  @date		8 March 2012
 *  @version		1.0
 */
-WILC_Sint32 host_int_add_wep_key_bss_sta(WILC_WFIDrvHandle hWFIDrv, const WILC_Uint8* pu8WepKey, WILC_Uint8 u8WepKeylen, WILC_Uint8 u8Keyidx);
+ATL_Sint32 host_int_add_wep_key_bss_sta(ATWILC_WFIDrvHandle hWFIDrv, const ATL_Uint8* pu8WepKey, ATL_Uint8 u8WepKeylen, ATL_Uint8 u8Keyidx);
 /**
 *  @brief 		host_int_add_wep_key_bss_ap
 *  @details 	valid only in AP mode if External Supplicant support is enabled. 
@@ -586,7 +610,7 @@ WILC_Sint32 host_int_add_wep_key_bss_sta(WILC_WFIDrvHandle hWFIDrv, const WILC_U
 *  @date		28 Feb 2013
 *  @version		1.0
 */
-WILC_Sint32 host_int_add_wep_key_bss_ap(WILC_WFIDrvHandle hWFIDrv, const WILC_Uint8* pu8WepKey, WILC_Uint8 u8WepKeylen, WILC_Uint8 u8Keyidx,WILC_Uint8 u8mode, AUTHTYPE_T tenuAuth_type);
+ATL_Sint32 host_int_add_wep_key_bss_ap(ATWILC_WFIDrvHandle hWFIDrv, const ATL_Uint8* pu8WepKey, ATL_Uint8 u8WepKeylen, ATL_Uint8 u8Keyidx,ATL_Uint8 u8mode, AUTHTYPE_T tenuAuth_type);
 
 /**
 *  @brief 		adds ptk Key
@@ -604,8 +628,8 @@ WILC_Sint32 host_int_add_wep_key_bss_ap(WILC_WFIDrvHandle hWFIDrv, const WILC_Ui
 *  @date		8 March 2012
 *  @version		1.0
 */
-WILC_Sint32 host_int_add_ptk(WILC_WFIDrvHandle hWFIDrv,WILC_Uint8* pu8Ptk,WILC_Uint8 u8PtkKeylen,
-	const WILC_Uint8* mac_addr,WILC_Uint8* pu8RxMic,WILC_Uint8* pu8TxMic,WILC_Uint8 mode,WILC_Uint8 u8Ciphermode,WILC_Uint8 u8Idx);
+ATL_Sint32 host_int_add_ptk(ATWILC_WFIDrvHandle hWFIDrv,ATL_Uint8* pu8Ptk,ATL_Uint8 u8PtkKeylen,
+	const ATL_Uint8* mac_addr,ATL_Uint8* pu8RxMic,ATL_Uint8* pu8TxMic,ATL_Uint8 mode,ATL_Uint8 u8Ciphermode,ATL_Uint8 u8Idx);
 
 /**
 *  @brief 		host_int_get_inactive_time
@@ -619,7 +643,7 @@ WILC_Sint32 host_int_add_ptk(WILC_WFIDrvHandle hWFIDrv,WILC_Uint8* pu8Ptk,WILC_U
 *  @date		15 April 2013
 *  @version		1.0
 */
-WILC_Sint32 host_int_get_inactive_time(WILC_WFIDrvHandle hWFIDrv,WILC_Uint8 * mac,WILC_Uint32* pu32InactiveTime);
+ATL_Sint32 host_int_get_inactive_time(ATWILC_WFIDrvHandle hWFIDrv,ATL_Uint8 * mac,ATL_Uint32* pu32InactiveTime);
 
 /**
 *  @brief 		adds Rx GTk Key
@@ -637,9 +661,9 @@ WILC_Sint32 host_int_get_inactive_time(WILC_WFIDrvHandle hWFIDrv,WILC_Uint8 * ma
 *  @date		8 March 2012
 *  @version		1.0
 */
-	WILC_Sint32 host_int_add_rx_gtk(WILC_WFIDrvHandle hWFIDrv, WILC_Uint8* pu8RxGtk,WILC_Uint8 u8GtkKeylen,
-			WILC_Uint8 u8KeyIdx,WILC_Uint32 u32KeyRSClen, WILC_Uint8* KeyRSC,
-			WILC_Uint8* pu8RxMic,WILC_Uint8* pu8TxMic,WILC_Uint8 mode,WILC_Uint8 u8Ciphermode);
+	ATL_Sint32 host_int_add_rx_gtk(ATWILC_WFIDrvHandle hWFIDrv, ATL_Uint8* pu8RxGtk,ATL_Uint8 u8GtkKeylen,
+			ATL_Uint8 u8KeyIdx,ATL_Uint32 u32KeyRSClen, ATL_Uint8* KeyRSC,
+			ATL_Uint8* pu8RxMic,ATL_Uint8* pu8TxMic,ATL_Uint8 mode,ATL_Uint8 u8Ciphermode);
 
 
 /**
@@ -658,7 +682,7 @@ WILC_Sint32 host_int_get_inactive_time(WILC_WFIDrvHandle hWFIDrv,WILC_Uint8 * ma
 *  @date		8 March 2012
 *  @version		1.0
 */
-WILC_Sint32 host_int_add_tx_gtk(WILC_WFIDrvHandle hWFIDrv,WILC_Uint8 u8KeyLen,WILC_Uint8* pu8TxGtk,WILC_Uint8 u8KeyIdx);
+ATL_Sint32 host_int_add_tx_gtk(ATWILC_WFIDrvHandle hWFIDrv,ATL_Uint8 u8KeyLen,ATL_Uint8* pu8TxGtk,ATL_Uint8 u8KeyIdx);
 
 /**
 *  @brief 		caches the pmkid 
@@ -681,7 +705,7 @@ WILC_Sint32 host_int_add_tx_gtk(WILC_WFIDrvHandle hWFIDrv,WILC_Uint8 u8KeyLen,WI
 *  @version		1.0
 */
 
-WILC_Sint32 host_int_set_pmkid_info(WILC_WFIDrvHandle hWFIDrv, tstrHostIFpmkidAttr* pu8PmkidInfoArray);
+ATL_Sint32 host_int_set_pmkid_info(ATWILC_WFIDrvHandle hWFIDrv, tstrHostIFpmkidAttr* pu8PmkidInfoArray);
 /**
 *  @brief 		gets the cached the pmkid info
 *  @details 	valid only in BSS STA mode if External Supplicant	 	
@@ -705,8 +729,8 @@ WILC_Sint32 host_int_set_pmkid_info(WILC_WFIDrvHandle hWFIDrv, tstrHostIFpmkidAt
 *  @version		1.0
 */
 
-WILC_Sint32 host_int_get_pmkid_info(WILC_WFIDrvHandle hWFIDrv,WILC_Uint8* pu8PmkidInfoArray, 
-									   WILC_Uint32 u32PmkidInfoLen);
+ATL_Sint32 host_int_get_pmkid_info(ATWILC_WFIDrvHandle hWFIDrv,ATL_Uint8* pu8PmkidInfoArray, 
+									   ATL_Uint32 u32PmkidInfoLen);
 
 /**
 *  @brief 		sets the pass phrase
@@ -722,8 +746,8 @@ WILC_Sint32 host_int_get_pmkid_info(WILC_WFIDrvHandle hWFIDrv,WILC_Uint8* pu8Pmk
 *  @date		8 March 2012
 *  @version		1.0
 */
-WILC_Sint32 host_int_set_RSNAConfigPSKPassPhrase(WILC_WFIDrvHandle hWFIDrv, WILC_Uint8* pu8PassPhrase, 
-														  WILC_Uint8 u8Psklength);
+ATL_Sint32 host_int_set_RSNAConfigPSKPassPhrase(ATWILC_WFIDrvHandle hWFIDrv, ATL_Uint8* pu8PassPhrase, 
+														  ATL_Uint8 u8Psklength);
 /**
 *  @brief 		gets the pass phrase
 *  @details 	AP/STA mode. This function gets the pass phrase used to
@@ -738,8 +762,8 @@ WILC_Sint32 host_int_set_RSNAConfigPSKPassPhrase(WILC_WFIDrvHandle hWFIDrv, WILC
 *  @date		8 March 2012
 *  @version		1.0
 */
-WILC_Sint32 host_int_get_RSNAConfigPSKPassPhrase(WILC_WFIDrvHandle hWFIDrv,
-												WILC_Uint8* pu8PassPhrase, WILC_Uint8 u8Psklength);
+ATL_Sint32 host_int_get_RSNAConfigPSKPassPhrase(ATWILC_WFIDrvHandle hWFIDrv,
+												ATL_Uint8* pu8PassPhrase, ATL_Uint8 u8Psklength);
 
 /**
 *  @brief 		gets mac address
@@ -752,7 +776,7 @@ WILC_Sint32 host_int_get_RSNAConfigPSKPassPhrase(WILC_WFIDrvHandle hWFIDrv,
 *  @date		19 April 2012
 *  @version		1.0
 */
-WILC_Sint32 host_int_get_MacAddress(WILC_WFIDrvHandle hWFIDrv,WILC_Uint8* pu8MacAddress);
+ATL_Sint32 host_int_get_MacAddress(ATWILC_WFIDrvHandle hWFIDrv,ATL_Uint8* pu8MacAddress);
 
 /**
 *  @brief 		sets mac address
@@ -765,7 +789,7 @@ WILC_Sint32 host_int_get_MacAddress(WILC_WFIDrvHandle hWFIDrv,WILC_Uint8* pu8Mac
 *  @date		16 July 2012
 *  @version		1.0
 */
-WILC_Sint32 host_int_set_MacAddress(WILC_WFIDrvHandle hWFIDrv,WILC_Uint8* pu8MacAddress);
+ATL_Sint32 host_int_set_MacAddress(ATWILC_WFIDrvHandle hWFIDrv,ATL_Uint8* pu8MacAddress);
 
 /**
 *  @brief 		wait until msg q is empty
@@ -778,7 +802,7 @@ WILC_Sint32 host_int_set_MacAddress(WILC_WFIDrvHandle hWFIDrv,WILC_Uint8* pu8Mac
 *  @date		19 march 2014
 *  @version		1.0
 */
-WILC_Sint32 host_int_wait_msg_queue_idle(void);
+ATL_Sint32 host_int_wait_msg_queue_idle(void);
 
 /**
 *  @brief 		gets the site survey results
@@ -810,9 +834,9 @@ WILC_Sint32 host_int_wait_msg_queue_idle(void);
 *  @version		1.0
 */
 #ifndef CONNECT_DIRECT
-WILC_Sint32 host_int_get_site_survey_results(WILC_WFIDrvHandle hWFIDrv, 
-											WILC_Uint8 ppu8RcvdSiteSurveyResults[][MAX_SURVEY_RESULT_FRAG_SIZE], 
-											WILC_Uint32 u32MaxSiteSrvyFragLen);
+ATL_Sint32 host_int_get_site_survey_results(ATWILC_WFIDrvHandle hWFIDrv, 
+											ATL_Uint8 ppu8RcvdSiteSurveyResults[][MAX_SURVEY_RESULT_FRAG_SIZE], 
+											ATL_Uint32 u32MaxSiteSrvyFragLen);
 #endif
 
 /**
@@ -831,7 +855,7 @@ WILC_Sint32 host_int_get_site_survey_results(WILC_WFIDrvHandle hWFIDrv,
 *  @version		1.0
 */
 
-WILC_Sint32 host_int_set_start_scan_req(WILC_WFIDrvHandle hWFIDrv,WILC_Uint8 scanSource);
+ATL_Sint32 host_int_set_start_scan_req(ATWILC_WFIDrvHandle hWFIDrv,ATL_Uint8 scanSource);
 /**
 *  @brief 		gets scan source of the last scan
 *  @details 	 	
@@ -847,7 +871,7 @@ WILC_Sint32 host_int_set_start_scan_req(WILC_WFIDrvHandle hWFIDrv,WILC_Uint8 sca
 *  @date		8 March 2012
 *  @version		1.0
 */
- WILC_Sint32 host_int_get_start_scan_req(WILC_WFIDrvHandle hWFIDrv,WILC_Uint8* pu8ScanSource);
+ ATL_Sint32 host_int_get_start_scan_req(ATWILC_WFIDrvHandle hWFIDrv,ATL_Uint8* pu8ScanSource);
 
 /**
 *  @brief 		sets a join request
@@ -861,17 +885,17 @@ WILC_Sint32 host_int_set_start_scan_req(WILC_WFIDrvHandle hWFIDrv,WILC_Uint8 sca
 *  @version		1.0
 */
 
-WILC_Sint32 host_int_set_join_req(WILC_WFIDrvHandle hWFIDrv, WILC_Uint8* pu8bssid,
-							     WILC_Uint8* pu8ssid, size_t ssidLen,
-							     const WILC_Uint8* pu8IEs, size_t IEsLen,
-							     tWILCpfConnectResult pfConnectResult, void* pvUserArg, 
-							     WILC_Uint8 u8security, AUTHTYPE_T tenuAuth_type, 
-							     WILC_Uint8 u8channel,
+ATL_Sint32 host_int_set_join_req(ATWILC_WFIDrvHandle hWFIDrv, ATL_Uint8* pu8bssid,
+							     ATL_Uint8* pu8ssid, size_t ssidLen,
+							     const ATL_Uint8* pu8IEs, size_t IEsLen,
+							     tATWILCpfConnectResult pfConnectResult, void* pvUserArg, 
+							     ATL_Uint8 u8security, AUTHTYPE_T tenuAuth_type, 
+							     ATL_Uint8 u8channel,
 							     void* pJoinParams);
 
 /**
 *  @brief 		Flush a join request parameters to FW, but actual connection
-*  @details 	The function is called in situation where WILC is connected to AP and 
+*  @details 	The function is called in situation where ATWILC is connected to AP and 
 			required to switch to hybrid FW for P2P connection 	
 *  @param[in] handle to the wifi driver,
 *  @return 		Error code indicating success/failure
@@ -881,7 +905,7 @@ WILC_Sint32 host_int_set_join_req(WILC_WFIDrvHandle hWFIDrv, WILC_Uint8* pu8bssi
 *  @version		8.0
 */
 
-WILC_Sint32 host_int_flush_join_req(WILC_WFIDrvHandle hWFIDrv);
+ATL_Sint32 host_int_flush_join_req(ATWILC_WFIDrvHandle hWFIDrv);
 
 
 /**
@@ -895,7 +919,7 @@ WILC_Sint32 host_int_flush_join_req(WILC_WFIDrvHandle hWFIDrv);
 *  @date		8 March 2012
 *  @version		1.0
 */
-WILC_Sint32 host_int_disconnect(WILC_WFIDrvHandle hWFIDrv, WILC_Uint16 u16ReasonCode);
+ATL_Sint32 host_int_disconnect(ATWILC_WFIDrvHandle hWFIDrv, ATL_Uint16 u16ReasonCode);
 
 /**
 *  @brief 		disconnects a sta
@@ -908,7 +932,7 @@ WILC_Sint32 host_int_disconnect(WILC_WFIDrvHandle hWFIDrv, WILC_Uint16 u16Reason
 *  @date		8 March 2012
 *  @version		1.0
 */
-WILC_Sint32 host_int_disconnect_station(WILC_WFIDrvHandle hWFIDrv,WILC_Uint8 assoc_id);
+ATL_Sint32 host_int_disconnect_station(ATWILC_WFIDrvHandle hWFIDrv,ATL_Uint8 assoc_id);
 /**
 *  @brief 		gets a Association request info
 *  @details 	 	
@@ -935,8 +959,8 @@ WILC_Sint32 host_int_disconnect_station(WILC_WFIDrvHandle hWFIDrv,WILC_Uint8 ass
 *  @version		1.0
 */
 
-WILC_Sint32 host_int_get_assoc_req_info(WILC_WFIDrvHandle hWFIDrv, WILC_Uint8* pu8AssocReqInfo, 
-										    WILC_Uint32 u32AssocReqInfoLen);
+ATL_Sint32 host_int_get_assoc_req_info(ATWILC_WFIDrvHandle hWFIDrv, ATL_Uint8* pu8AssocReqInfo, 
+										    ATL_Uint32 u32AssocReqInfoLen);
 /**
 *  @brief 		gets a Association Response info
 *  @details 	 	
@@ -949,8 +973,8 @@ WILC_Sint32 host_int_get_assoc_req_info(WILC_WFIDrvHandle hWFIDrv, WILC_Uint8* p
 *  @version		1.0
 */
 
-WILC_Sint32 host_int_get_assoc_res_info(WILC_WFIDrvHandle hWFIDrv, WILC_Uint8* pu8AssocRespInfo, 
-										    WILC_Uint32 u32MaxAssocRespInfoLen, WILC_Uint32* pu32RcvdAssocRespInfoLen);
+ATL_Sint32 host_int_get_assoc_res_info(ATWILC_WFIDrvHandle hWFIDrv, ATL_Uint8* pu8AssocRespInfo, 
+										    ATL_Uint32 u32MaxAssocRespInfoLen, ATL_Uint32* pu32RcvdAssocRespInfoLen);
 /**
 *  @brief 		gets a Association Response info
 *  @details 	Valid only in STA mode. This function gives the RSSI	
@@ -966,8 +990,8 @@ WILC_Sint32 host_int_get_assoc_res_info(WILC_WFIDrvHandle hWFIDrv, WILC_Uint8* p
 *  @date		8 March 2012
 *  @version		1.0
 */
-WILC_Sint32 host_int_get_rx_power_level(WILC_WFIDrvHandle hWFIDrv, WILC_Uint8* pu8RxPowerLevel, 
-										   WILC_Uint32 u32RxPowerLevelLen);
+ATL_Sint32 host_int_get_rx_power_level(ATWILC_WFIDrvHandle hWFIDrv, ATL_Uint8* pu8RxPowerLevel, 
+										   ATL_Uint32 u32RxPowerLevelLen);
 
 /**
 *  @brief 		sets a channel
@@ -984,7 +1008,7 @@ WILC_Sint32 host_int_get_rx_power_level(WILC_WFIDrvHandle hWFIDrv, WILC_Uint8* p
 *  @date		8 March 2012
 *  @version		1.0
 */
-WILC_Sint32 host_int_set_mac_chnl_num(WILC_WFIDrvHandle hWFIDrv,WILC_Uint8 u8ChNum);
+ATL_Sint32 host_int_set_mac_chnl_num(ATWILC_WFIDrvHandle hWFIDrv,ATL_Uint8 u8ChNum);
 
 /**
 *  @brief 		gets the current channel index
@@ -1001,7 +1025,7 @@ WILC_Sint32 host_int_set_mac_chnl_num(WILC_WFIDrvHandle hWFIDrv,WILC_Uint8 u8ChN
 *  @date		8 March 2012
 *  @version		1.0
 */
-WILC_Sint32 host_int_get_host_chnl_num(WILC_WFIDrvHandle hWFIDrv, WILC_Uint8* pu8ChNo);
+ATL_Sint32 host_int_get_host_chnl_num(ATWILC_WFIDrvHandle hWFIDrv, ATL_Uint8* pu8ChNo);
 /**
 *  @brief 		gets the sta rssi
 *  @details 	gets the currently maintained RSSI value for the station. 
@@ -1015,8 +1039,8 @@ WILC_Sint32 host_int_get_host_chnl_num(WILC_WFIDrvHandle hWFIDrv, WILC_Uint8* pu
 *  @date		8 March 2012
 *  @version		1.0
 */
-WILC_Sint32 host_int_get_rssi(WILC_WFIDrvHandle hWFIDrv, WILC_Sint8* ps8Rssi);
-WILC_Sint32 host_int_get_link_speed(WILC_WFIDrvHandle hWFIDrv, WILC_Sint8* ps8lnkspd);
+ATL_Sint32 host_int_get_rssi(ATWILC_WFIDrvHandle hWFIDrv, ATL_Sint8* ps8Rssi);
+ATL_Sint32 host_int_get_link_speed(ATWILC_WFIDrvHandle hWFIDrv, ATL_Sint8* ps8lnkspd);
 /**
 *  @brief 		scans a set of channels
 *  @details 	
@@ -1034,10 +1058,10 @@ WILC_Sint32 host_int_get_link_speed(WILC_WFIDrvHandle hWFIDrv, WILC_Sint8* ps8ln
 *  @date		8 March 2012
 *  @version		1.0
 */
-WILC_Sint32 host_int_scan(WILC_WFIDrvHandle hWFIDrv, WILC_Uint8 u8ScanSource,
-					     WILC_Uint8 u8ScanType, WILC_Uint8* pu8ChnlFreqList,
-					     WILC_Uint8 u8ChnlListLen, const WILC_Uint8* pu8IEs,
-					     size_t IEsLen, tWILCpfScanResult ScanResult,
+ATL_Sint32 host_int_scan(ATWILC_WFIDrvHandle hWFIDrv, ATL_Uint8 u8ScanSource,
+					     ATL_Uint8 u8ScanType, ATL_Uint8* pu8ChnlFreqList,
+					     ATL_Uint8 u8ChnlListLen, const ATL_Uint8* pu8IEs,
+					     size_t IEsLen, tATWILCpfScanResult ScanResult,
 					     void* pvUserArg,tstrHiddenNetwork  *pstrHiddenNetwork);
 /**
 *  @brief 		sets configuration wids values
@@ -1050,7 +1074,7 @@ WILC_Sint32 host_int_scan(WILC_WFIDrvHandle hWFIDrv, WILC_Uint8 u8ScanSource,
 *  @date		8 March 2012
 *  @version		1.0
 */
-WILC_Sint32 hif_set_cfg(WILC_WFIDrvHandle hWFIDrv, tstrCfgParamVal * pstrCfgParamVal);
+ATL_Sint32 hif_set_cfg(ATWILC_WFIDrvHandle hWFIDrv, tstrCfgParamVal * pstrCfgParamVal);
 
 /**
 *  @brief 		gets configuration wids values
@@ -1064,7 +1088,7 @@ WILC_Sint32 hif_set_cfg(WILC_WFIDrvHandle hWFIDrv, tstrCfgParamVal * pstrCfgPara
 *  @date		8 March 2012
 *  @version		1.0
 */
-WILC_Sint32 hif_get_cfg(WILC_WFIDrvHandle hWFIDrv,WILC_Uint16 u16WID,WILC_Uint16* pu16WID_Value);
+ATL_Sint32 hif_get_cfg(ATWILC_WFIDrvHandle hWFIDrv,ATL_Uint16 u16WID,ATL_Uint16* pu16WID_Value);
 /*****************************************************************************/
 /*							Notification Functions							 */
 /*****************************************************************************/
@@ -1084,7 +1108,7 @@ WILC_Sint32 hif_get_cfg(WILC_WFIDrvHandle hWFIDrv,WILC_Uint16 u16WID,WILC_Uint16
 *  @version		1.0
 */
 void host_int_send_join_leave_info_to_host
-						(WILC_Uint16 assocId, WILC_Uint8* stationAddr, WILC_Bool joining);
+						(ATL_Uint16 assocId, ATL_Uint8* stationAddr, ATL_Bool joining);
 
 /**
 *  @brief 		notifies host with stations found in scan
@@ -1100,7 +1124,7 @@ void host_int_send_join_leave_info_to_host
 *  @version		1.0
 */
 void host_int_send_network_info_to_host
-			(WILC_Uint8 *macStartAddress,WILC_Uint16 u16RxFrameLen, WILC_Sint8 s8Rssi);
+			(ATL_Uint8 *macStartAddress,ATL_Uint16 u16RxFrameLen, ATL_Sint8 s8Rssi);
 
 /**
 *  @brief 		host interface initialization function
@@ -1111,7 +1135,7 @@ void host_int_send_network_info_to_host
 *  @date		8 March 2012
 *  @version		1.0
 */
-WILC_Sint32 host_int_init(WILC_WFIDrvHandle* phWFIDrv);
+ATL_Sint32 host_int_init(ATWILC_WFIDrvHandle* phWFIDrv);
 
 /**
 *  @brief 		host interface initialization function
@@ -1122,11 +1146,11 @@ WILC_Sint32 host_int_init(WILC_WFIDrvHandle* phWFIDrv);
 *  @date		8 March 2012
 *  @version		1.0
 */
-WILC_Sint32 host_int_deinit(WILC_WFIDrvHandle hWFIDrv);
+ATL_Sint32 host_int_deinit(ATWILC_WFIDrvHandle hWFIDrv);
 
 
 /*!
- *  @fn		WILC_Sint32 host_int_add_beacon(WILC_WFIDrvHandle hWFIDrv,WILC_Uint8 u8Index)
+ *  @fn		ATL_Sint32 host_int_add_beacon(ATWILC_WFIDrvHandle hWFIDrv,ATL_Uint8 u8Index)
  *  @brief		Sends a beacon to the firmware to be transmitted over the air
  *  @details	
  *  @param[in,out]	hWFIDrv		handle to the wifi driver
@@ -1147,15 +1171,15 @@ WILC_Sint32 host_int_deinit(WILC_WFIDrvHandle hWFIDrv);
  *  @version		1.0 Description
 
  */
-WILC_Sint32 host_int_add_beacon(WILC_WFIDrvHandle hWFIDrv, WILC_Uint32 u32Interval,
-									 WILC_Uint32 u32DTIMPeriod,
-									 WILC_Uint32 u32HeadLen, WILC_Uint8* pu8Head,
-									 WILC_Uint32 u32TailLen, WILC_Uint8* pu8tail);
+ATL_Sint32 host_int_add_beacon(ATWILC_WFIDrvHandle hWFIDrv, ATL_Uint32 u32Interval,
+									 ATL_Uint32 u32DTIMPeriod,
+									 ATL_Uint32 u32HeadLen, ATL_Uint8* pu8Head,
+									 ATL_Uint32 u32TailLen, ATL_Uint8* pu8tail);
 
 
 /*!
- *  @fn		WILC_Sint32 host_int_del_beacon(WILC_WFIDrvHandle hWFIDrv)
- *  @brief		Removes the beacon and stops trawilctting it over the air
+ *  @fn		ATL_Sint32 host_int_del_beacon(ATWILC_WFIDrvHandle hWFIDrv)
+ *  @brief		Removes the beacon and stops transmitting it over the air
  *  @details	
  *  @param[in,out]	hWFIDrv		handle to the wifi driver
  *  @return	0 for Success, error otherwise
@@ -1165,10 +1189,10 @@ WILC_Sint32 host_int_add_beacon(WILC_WFIDrvHandle hWFIDrv, WILC_Uint32 u32Interv
  *  @date		10 Julys 2012
  *  @version		1.0 Description
  */
-WILC_Sint32 host_int_del_beacon(WILC_WFIDrvHandle hWFIDrv);
+ATL_Sint32 host_int_del_beacon(ATWILC_WFIDrvHandle hWFIDrv);
 
 /*!
- *  @fn		WILC_Sint32 host_int_add_station(WILC_WFIDrvHandle hWFIDrv, tstrWILC_AddStaParam strStaParams)
+ *  @fn		ATL_Sint32 host_int_add_station(ATWILC_WFIDrvHandle hWFIDrv, tstrATWILC_AddStaParam strStaParams)
  *  @brief		Notifies the firmware with a new associated stations
  *  @details	
  *  @param[in,out]	hWFIDrv		handle to the wifi driver
@@ -1180,9 +1204,9 @@ WILC_Sint32 host_int_del_beacon(WILC_WFIDrvHandle hWFIDrv);
  *  @date		12 July 2012
  *  @version		1.0 Description
  */
-WILC_Sint32 host_int_add_station(WILC_WFIDrvHandle hWFIDrv, tstrWILC_AddStaParam* pstrStaParams);
+ATL_Sint32 host_int_add_station(ATWILC_WFIDrvHandle hWFIDrv, tstrATWILC_AddStaParam* pstrStaParams);
 /*!
- *  @fn		WILC_Sint32 host_int_del_allstation(WILC_WFIDrvHandle hWFIDrv, WILC_Uint8* pu8MacAddr)
+ *  @fn		ATL_Sint32 host_int_del_allstation(ATWILC_WFIDrvHandle hWFIDrv, ATL_Uint8* pu8MacAddr)
  *  @brief		Deauthenticates clients when group is terminating
  *  @details	
  *  @param[in,out]	hWFIDrv		handle to the wifi driver
@@ -1194,9 +1218,9 @@ WILC_Sint32 host_int_add_station(WILC_WFIDrvHandle hWFIDrv, tstrWILC_AddStaParam
  *  @date		09 April 2014
  *  @version		1.0 Description
  */
-WILC_Sint32 host_int_del_allstation(WILC_WFIDrvHandle hWFIDrv, WILC_Uint8 pu8MacAddr[][ETH_ALEN]);
+ATL_Sint32 host_int_del_allstation(ATWILC_WFIDrvHandle hWFIDrv, ATL_Uint8 pu8MacAddr[][ETH_ALEN]);
 /*!
- *  @fn		WILC_Sint32 host_int_del_station(WILC_WFIDrvHandle hWFIDrv, WILC_Uint8* pu8MacAddr)
+ *  @fn		ATL_Sint32 host_int_del_station(ATWILC_WFIDrvHandle hWFIDrv, ATL_Uint8* pu8MacAddr)
  *  @brief		Notifies the firmware with a new deleted station
  *  @details	
  *  @param[in,out]	hWFIDrv		handle to the wifi driver
@@ -1208,10 +1232,10 @@ WILC_Sint32 host_int_del_allstation(WILC_WFIDrvHandle hWFIDrv, WILC_Uint8 pu8Mac
  *  @date		15 July 2012
  *  @version		1.0 Description
  */
-WILC_Sint32 host_int_del_station(WILC_WFIDrvHandle hWFIDrv, WILC_Uint8* pu8MacAddr);
+ATL_Sint32 host_int_del_station(ATWILC_WFIDrvHandle hWFIDrv, ATL_Uint8* pu8MacAddr);
 
 /*!
- *  @fn		WILC_Sint32 host_int_edit_station(WILC_WFIDrvHandle hWFIDrv, tstrWILC_AddStaParam strStaParams)
+ *  @fn		ATL_Sint32 host_int_edit_station(ATWILC_WFIDrvHandle hWFIDrv, tstrATWILC_AddStaParam strStaParams)
  *  @brief		Notifies the firmware with new parameters of an already associated station
  *  @details	
  *  @param[in,out]	hWFIDrv		handle to the wifi driver
@@ -1223,10 +1247,10 @@ WILC_Sint32 host_int_del_station(WILC_WFIDrvHandle hWFIDrv, WILC_Uint8* pu8MacAd
  *  @date		15 July 2012
  *  @version		1.0 Description
  */
-WILC_Sint32 host_int_edit_station(WILC_WFIDrvHandle hWFIDrv, tstrWILC_AddStaParam* pstrStaParams);
+ATL_Sint32 host_int_edit_station(ATWILC_WFIDrvHandle hWFIDrv, tstrATWILC_AddStaParam* pstrStaParams);
 
 /*!
- *  @fn		WILC_Sint32 host_int_set_power_mgmt(WILC_WFIDrvHandle hWFIDrv, WILC_Bool bIsEnabled, WILC_Uint32 u32Timeout)
+ *  @fn		ATL_Sint32 host_int_set_power_mgmt(ATWILC_WFIDrvHandle hWFIDrv, ATL_Bool bIsEnabled, ATL_Uint32 u32Timeout)
  *  @brief		Set the power management mode to enabled or disabled
  *  @details	
  *  @param[in,out]	hWFIDrv		handle to the wifi driver
@@ -1240,10 +1264,10 @@ WILC_Sint32 host_int_edit_station(WILC_WFIDrvHandle hWFIDrv, tstrWILC_AddStaPara
  *  @date		24 November 2012
  *  @version		1.0 Description
  */
-WILC_Sint32 host_int_set_power_mgmt(WILC_WFIDrvHandle hWFIDrv, WILC_Bool bIsEnabled, WILC_Uint32 u32Timeout);
+ATL_Sint32 host_int_set_power_mgmt(ATWILC_WFIDrvHandle hWFIDrv, ATL_Bool bIsEnabled, ATL_Uint32 u32Timeout);
 
 /*!
- *  @fn		WILC_Sint32 host_int_setup_multicast_filter(WILC_WFIDrvHandle hWFIDrv, WILC_Bool bIsEnabled, WILC_Uint8 u8count)
+ *  @fn		ATL_Sint32 host_int_setup_multicast_filter(ATWILC_WFIDrvHandle hWFIDrv, ATL_Bool bIsEnabled, ATL_Uint8 u8count)
  *  @brief		Set the multicast filter paramters
  *  @details	
  *  @param[in,out]	hWFIDrv		handle to the wifi driver
@@ -1257,7 +1281,7 @@ WILC_Sint32 host_int_set_power_mgmt(WILC_WFIDrvHandle hWFIDrv, WILC_Bool bIsEnab
  *  @date		24 November 2012
  *  @version		1.0 Description
  */
-WILC_Sint32 host_int_setup_multicast_filter(WILC_WFIDrvHandle hWFIDrv, WILC_Bool bIsEnabled, WILC_Uint32 u32count);
+ATL_Sint32 host_int_setup_multicast_filter(ATWILC_WFIDrvHandle hWFIDrv, ATL_Bool bIsEnabled, ATL_Uint32 u32count);
 /**
 *  @brief           host_int_setup_ipaddress
 *  @details 	   set IP address on firmware
@@ -1267,7 +1291,7 @@ WILC_Sint32 host_int_setup_multicast_filter(WILC_WFIDrvHandle hWFIDrv, WILC_Bool
 *  @date	
 *  @version	1.0
 */
-WILC_Sint32 host_int_setup_ipaddress(WILC_WFIDrvHandle hWFIDrv, WILC_Uint8* pu8IPAddr, WILC_Uint8 idx);
+ATL_Sint32 host_int_setup_ipaddress(ATWILC_WFIDrvHandle hWFIDrv, ATL_Uint8* pu8IPAddr, ATL_Uint8 idx);
 
 
 /**
@@ -1279,7 +1303,7 @@ WILC_Sint32 host_int_setup_ipaddress(WILC_WFIDrvHandle hWFIDrv, WILC_Uint8* pu8I
 *  @date	
 *  @version	1.0
 */
-WILC_Sint32 host_int_delBASession(WILC_WFIDrvHandle hWFIDrv, char* pBSSID,char TID);
+ATL_Sint32 host_int_delBASession(ATWILC_WFIDrvHandle hWFIDrv, char* pBSSID,char TID);
 
 /**
 *  @brief           host_int_delBASession
@@ -1290,7 +1314,7 @@ WILC_Sint32 host_int_delBASession(WILC_WFIDrvHandle hWFIDrv, char* pBSSID,char T
 *  @date	
 *  @version	1.0
 */
-WILC_Sint32 host_int_del_All_Rx_BASession(WILC_WFIDrvHandle hWFIDrv, char* pBSSID,char TID);
+ATL_Sint32 host_int_del_All_Rx_BASession(ATWILC_WFIDrvHandle hWFIDrv, char* pBSSID,char TID);
 
 
 /**
@@ -1302,9 +1326,9 @@ WILC_Sint32 host_int_del_All_Rx_BASession(WILC_WFIDrvHandle hWFIDrv, char* pBSSI
 *  @date	
 *  @version	1.0
 */
-WILC_Sint32 host_int_get_ipaddress(WILC_WFIDrvHandle hWFIDrv, WILC_Uint8* pu8IPAddr, WILC_Uint8 idx);
+ATL_Sint32 host_int_get_ipaddress(ATWILC_WFIDrvHandle hWFIDrv, ATL_Uint8* pu8IPAddr, ATL_Uint8 idx);
 
-#ifdef WILC_P2P
+#ifdef ATWILC_P2P
 /**
 *  @brief           host_int_remain_on_channel
 *  @details 	   
@@ -1314,7 +1338,7 @@ WILC_Sint32 host_int_get_ipaddress(WILC_WFIDrvHandle hWFIDrv, WILC_Uint8* pu8IPA
 *  @date	
 *  @version	1.0
 */
-WILC_Sint32 host_int_remain_on_channel(WILC_WFIDrvHandle hWFIDrv, WILC_Uint32 u32SessionID, WILC_Uint32 u32duration,WILC_Uint16 chan,tWILCpfRemainOnChanExpired RemainOnChanExpired, tWILCpfRemainOnChanReady RemainOnChanReady,void* pvUserArg);
+ATL_Sint32 host_int_remain_on_channel(ATWILC_WFIDrvHandle hWFIDrv, ATL_Uint32 u32SessionID, ATL_Uint32 u32duration,ATL_Uint16 chan,tATWILCpfRemainOnChanExpired RemainOnChanExpired, tATWILCpfRemainOnChanReady RemainOnChanReady,void* pvUserArg);
 
 /**
 *  @brief           	host_int_ListenStateExpired
@@ -1330,7 +1354,7 @@ WILC_Sint32 host_int_remain_on_channel(WILC_WFIDrvHandle hWFIDrv, WILC_Uint32 u3
 *  @date	
 *  @version		1.0
 */
-WILC_Sint32 host_int_ListenStateExpired(WILC_WFIDrvHandle hWFIDrv, WILC_Uint32 u32SessionID);
+ATL_Sint32 host_int_ListenStateExpired(ATWILC_WFIDrvHandle hWFIDrv, ATL_Uint32 u32SessionID);
 
 /**
 *  @brief           host_int_frame_register
@@ -1341,7 +1365,7 @@ WILC_Sint32 host_int_ListenStateExpired(WILC_WFIDrvHandle hWFIDrv, WILC_Uint32 u
 *  @date	
 *  @version	1.0
 */
-WILC_Sint32 host_int_frame_register(WILC_WFIDrvHandle hWFIDrv, WILC_Uint16 u16FrameType,WILC_Bool bReg);
+ATL_Sint32 host_int_frame_register(ATWILC_WFIDrvHandle hWFIDrv, ATL_Uint16 u16FrameType,ATL_Bool bReg);
 #endif
 /**
 *  @brief           host_int_set_wfi_drv_handler
@@ -1352,22 +1376,22 @@ WILC_Sint32 host_int_frame_register(WILC_WFIDrvHandle hWFIDrv, WILC_Uint16 u16Fr
 *  @date	
 *  @version	1.0
 */
-WILC_Sint32 host_int_set_wfi_drv_handler(WILC_Uint32 u32address);
-WILC_Sint32 host_int_set_operation_mode(WILC_WFIDrvHandle hWFIDrv, WILC_Uint32 u32mode);
+ATL_Sint32 host_int_set_wfi_drv_handler(ATL_Uint32 u32address);
+ATL_Sint32 host_int_set_operation_mode(ATWILC_WFIDrvHandle hWFIDrv, ATL_Uint32 u32mode);
 
-#ifdef WILC1000_BT_COEXISTENCE
-WILC_Sint32 host_int_change_bt_coex_mode(WILC_WFIDrvHandle hWFIDrv,WILC_Uint8 u8BtCoexMode);
+#ifdef ATWILC_BT_COEXISTENCE
+ATL_Sint32 host_int_change_bt_coex_mode(ATWILC_WFIDrvHandle hWFIDrv,ATL_Uint8 u8BtCoexMode);
 #endif
 
-static WILC_Sint32 Handle_ScanDone(void* drvHandler,tenuScanEvent enuEvent);
+static ATL_Sint32 Handle_ScanDone(void* drvHandler,tenuScanEvent enuEvent);
 
-static int host_int_addBASession(WILC_WFIDrvHandle hWFIDrv, char* pBSSID,char TID,short int BufferSize,
+static int host_int_addBASession(ATWILC_WFIDrvHandle hWFIDrv, char* pBSSID,char TID,short int BufferSize,
 	short int SessionTimeout,void * drvHandler);
 
 
 void host_int_freeJoinParams(void* pJoinParams);
 
-WILC_Sint32 host_int_get_statistics(WILC_WFIDrvHandle hWFIDrv, tstrStatistics* pstrStatistics);
+ATL_Sint32 host_int_get_statistics(ATWILC_WFIDrvHandle hWFIDrv, tstrStatistics* pstrStatistics);
 
 /*****************************************************************************/
 /*																			 */

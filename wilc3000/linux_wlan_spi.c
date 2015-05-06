@@ -11,37 +11,36 @@
 
 #include "linux_wlan_common.h"
 
-#ifdef WILC_ASIC_A0
+#ifdef ATWILC_ASIC_A0
 #define MIN_SPEED 24000000
 #define MAX_SPEED 48000000
-#else /* WILC_ASIC_A0 */
+#else /* ATWILC_ASIC_A0 */
 /* Limit clk to 6MHz on FPGA. */
 #define MIN_SPEED 6000000
 #define MAX_SPEED 6000000 
-#endif /* WILC_ASIC_A0 */
+#endif /* ATWILC_ASIC_A0 */
 
 static uint32_t SPEED = MIN_SPEED;
 
-struct spi_device* wilc_spi_dev;
+struct spi_device* atwilc_spi_dev;
 
 extern struct semaphore spi_probe_sync;
 extern void linux_wlan_unlock(void* vp);
 
 void linux_spi_deinit(void* vp);
 
-extern volatile int gbCrashRecover;
-static int wilc_bus_probe(struct spi_device* spi){
+static int atwilc_bus_probe(struct spi_device* spi){
 	
 	PRINT_D(BUS_DBG,"spiModalias: %s\n",spi->modalias);
 	PRINT_D(BUS_DBG,"spiMax-Speed: %d\n",spi->max_speed_hz);
-	wilc_spi_dev = spi;
+	atwilc_spi_dev = spi;
 
 	linux_wlan_unlock(&spi_probe_sync);
 	
 	return 0;
 }
 
-static int __devexit wilc_bus_remove(struct spi_device* spi){
+static int __devexit atwilc_bus_remove(struct spi_device* spi){
 	
 		//linux_spi_deinit(NULL);
 	
@@ -49,18 +48,18 @@ static int __devexit wilc_bus_remove(struct spi_device* spi){
 }
 
 
-struct spi_driver wilc_bus __refdata = {
+struct spi_driver atwilc_bus __refdata = {
 		.driver = {
 				.name = MODALIAS,
 		},
-		.probe =  wilc_bus_probe,
-		.remove = __devexit_p(wilc_bus_remove),
+		.probe =  atwilc_bus_probe,
+		.remove = __devexit_p(atwilc_bus_remove),
 };
 
 
 void linux_spi_deinit(void* vp){
 	
-		spi_unregister_driver(&wilc_bus);	
+		spi_unregister_driver(&atwilc_bus);	
 		
 		SPEED = MIN_SPEED;
 		PRINT_ER("@@@@@@@@@@@@ restore SPI speed to %d @@@@@@@@@\n", SPEED);
@@ -74,15 +73,15 @@ int linux_spi_init(void* vp){
 	static int called = 0;
 	
 	
-	if(called == 0 || gbCrashRecover){
+	if(called == 0){
 		called++;
-		if(&wilc_bus == NULL){
-			PRINT_ER("wilc_bus address is NULL\n");
+		if(&atwilc_bus == NULL){
+			PRINT_ER("atwilc_bus address is NULL\n");
 		}
-		ret = spi_register_driver(&wilc_bus);		
+		ret = spi_register_driver(&atwilc_bus);		
 	}
 
-	/* change return value to match WILC interface */
+	/* change return value to match ATWILC interface */
 	(ret<0)? (ret = 0):(ret = 1);
 	
 	return ret;
@@ -106,7 +105,7 @@ int linux_spi_write(uint8_t* b, uint32_t len){
 	
 		spi_message_init(&msg);
 		spi_message_add_tail(&tr,&msg);
-		ret = spi_sync(wilc_spi_dev,&msg);
+		ret = spi_sync(atwilc_spi_dev,&msg);
 		if(ret < 0){
 			PRINT_ER( "SPI transaction failed\n");
 		}
@@ -117,7 +116,7 @@ int linux_spi_write(uint8_t* b, uint32_t len){
 		ret = -1;
 	}
 
-	/* change return value to match WILC interface */
+	/* change return value to match ATWILC interface */
 	(ret<0)? (ret = 0):(ret = 1);
 
 
@@ -148,7 +147,7 @@ int linux_spi_write(uint8_t* b, uint32_t len){
 			
 			spi_message_init(&msg);
 			spi_message_add_tail(&tr,&msg);
-			ret = spi_sync(wilc_spi_dev,&msg);
+			ret = spi_sync(atwilc_spi_dev,&msg);
 			if(ret < 0){
 				PRINT_ER( "SPI transaction failed\n");
 			}
@@ -160,7 +159,7 @@ int linux_spi_write(uint8_t* b, uint32_t len){
 				ret = -1;
 			}
 		
-	/* change return value to match WILC interface */
+	/* change return value to match ATWILC interface */
 	(ret<0)? (ret = 0):(ret = 1);
 	
 	
@@ -187,7 +186,7 @@ int linux_spi_read(unsigned char*rb, unsigned long rlen){
 
 		spi_message_init(&msg);
 		spi_message_add_tail(&tr,&msg);
-		ret = spi_sync(wilc_spi_dev,&msg);
+		ret = spi_sync(atwilc_spi_dev,&msg);
 		if(ret < 0){
 			PRINT_ER("SPI transaction failed\n");
 		}
@@ -195,7 +194,7 @@ int linux_spi_read(unsigned char*rb, unsigned long rlen){
 		PRINT_ER("can't read data with the following length: %ld\n",rlen);
 		ret = -1;
 	}
-	/* change return value to match WILC interface */
+	/* change return value to match ATWILC interface */
 	(ret<0)? (ret = 0):(ret = 1);
 
 	return ret;
@@ -223,7 +222,7 @@ int linux_spi_read(unsigned char*rb, unsigned long rlen){
 
 				spi_message_init(&msg);
 				spi_message_add_tail(&tr,&msg);
-				ret = spi_sync(wilc_spi_dev,&msg);
+				ret = spi_sync(atwilc_spi_dev,&msg);
 				if(ret < 0){
 					PRINT_ER("SPI transaction failed\n");
 				}
@@ -232,7 +231,7 @@ int linux_spi_read(unsigned char*rb, unsigned long rlen){
 					PRINT_ER("can't read data with the following length: %ld\n",rlen);
 					ret = -1;
 				}
-		/* change return value to match WILC interface */
+		/* change return value to match ATWILC interface */
 		(ret<0)? (ret = 0):(ret = 1);
 	
 	return ret;
@@ -258,7 +257,7 @@ int linux_spi_write_read(unsigned char*wb, unsigned char*rb, unsigned int rlen)
 
 		spi_message_init(&msg);
 		spi_message_add_tail(&tr,&msg);
-		ret = spi_sync(wilc_spi_dev,&msg);
+		ret = spi_sync(atwilc_spi_dev,&msg);
 		if(ret < 0){
 			PRINT_ER("SPI transaction failed\n");
 		}
@@ -266,7 +265,7 @@ int linux_spi_write_read(unsigned char*wb, unsigned char*rb, unsigned int rlen)
 		PRINT_ER("can't read data with the following length: %d\n",rlen);
 		ret = -1;
 	}
-	/* change return value to match WILC interface */
+	/* change return value to match ATWILC interface */
 	(ret<0)? (ret = 0):(ret = 1);
 
 	return ret;

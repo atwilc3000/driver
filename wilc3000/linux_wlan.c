@@ -1,10 +1,10 @@
 #ifndef SIMULATION
-#include "wilc_wfi_cfgoperations.h"
+#include "atwilc_wfi_cfg_operations.h"
 #include "linux_wlan_common.h"
-#include "wilc_wlan_if.h"
-#include "wilc_wlan.h"
+#include "atwilc_wlan_if.h"
+#include "atwilc_wlan.h"
 #ifdef USE_WIRELESS
-#include "wilc_wfi_cfgoperations.h"
+#include "atwilc_wfi_cfg_operations.h"
 #endif
 
 #include "linux_wlan_common.h"
@@ -35,7 +35,7 @@
 #include <linux/version.h>
 #include <linux/semaphore.h>
 
-#ifdef WILC_SDIO
+#ifdef ATWILC_SDIO
 #include "linux_wlan_sdio.h"
 #include <linux/mmc/host.h>
 #include <linux/mmc/card.h>
@@ -48,23 +48,22 @@ extern void mmc_stop_host(struct mmc_host *host);
 #include "linux_wlan_spi.h"
 #endif
 
-#ifdef WILC_FULLY_HOSTING_AP
-#include "wilc_host_ap.h"
+#ifdef ATWILC_FULLY_HOSTING_AP
+#include "atwilc_host_ap.h"
 #endif
 
-extern uint32_t cfg_timed_out_cnt;
 #include "at_pwr_dev.h"
 #include "linux_os_wrapper.h"
 
 #ifdef DISABLE_PWRSAVE_AND_SCAN_DURING_IP
-extern WILC_Bool g_obtainingIP;
+extern ATL_Bool g_obtainingIP;
 #endif
-extern WILC_Uint16 Set_machw_change_vir_if(WILC_Bool bValue);
+extern ATL_Uint16 Set_machw_change_vir_if(ATL_Bool bValue);
 extern void resolve_disconnect_aberration(void* drvHandler);
-extern WILC_Uint8 gau8MulticastMacAddrList[WILC_MULTICAST_TABLE_SIZE][ETH_ALEN];
-void wilc1000_wlan_deinit(linux_wlan_t *nic, uint8_t power_down);
+extern ATL_Uint8 gau8MulticastMacAddrList[ATWILC_MULTICAST_TABLE_SIZE][ETH_ALEN];
+void atwilc_wlan_deinit(linux_wlan_t *nic);
 #ifdef DISABLE_PWRSAVE_AND_SCAN_DURING_IP
-extern WILC_TimerHandle hDuringIpTimer;
+extern ATL_TimerHandle hDuringIpTimer;
 #endif
 
 #ifdef DISABLE_PWRSAVE_AND_SCAN_DURING_IP
@@ -75,11 +74,11 @@ static struct notifier_block g_dev_notifier = {
 };
 #endif
 
-#ifdef WILC1000_BT_COEXISTENCE /* For Hexing phone */
-//static WILC_Uint8 u8Bluetooth_state = 0;
+#ifdef ATWILC_BT_COEXISTENCE /* For Hexing phone */
+
 #endif
 
-#define wilc_wlan_deinit(nic) 	if(&g_linux_wlan->oup != NULL)	\
+#define at_wlan_deinit(nic) 	if(&g_linux_wlan->oup != NULL)	\
 								if(g_linux_wlan->oup.wlan_cleanup != NULL) \
 								        	g_linux_wlan->oup.wlan_cleanup()
 
@@ -114,19 +113,18 @@ typedef struct android_wifi_priv_cmd {
 	/*
 		to sync between mac_close and module exit.
 		don't initialize or de-initialize from init/deinitlocks
-		to be initialized from module wilc_netdev_init and 
+		to be initialized from module atwilc_netdev_init and 
 		deinitialized from mdoule_exit
 	*/
 static struct semaphore close_exit_sync;
 
 unsigned int int_rcvdU;
 unsigned int int_rcvdB;
-unsigned int int_clrd;
 
 static int wlan_deinit_locks(linux_wlan_t* nic);
 static void wlan_deinitialize_threads(linux_wlan_t* nic);
-extern void WILC_WFI_monitor_rx(uint8_t *buff, uint32_t size);
-extern void WILC_WFI_p2p_rx(struct net_device *dev,uint8_t *buff, uint32_t size);
+extern void ATWILC_WFI_monitor_rx(uint8_t *buff, uint32_t size);
+extern void ATWILC_WFI_p2p_rx(struct net_device *dev,uint8_t *buff, uint32_t size);
 
 static void linux_wlan_tx_complete(void* priv, int status);
 void frmw_to_linux(uint8_t *buff, uint32_t size,uint32_t pkt_offset);
@@ -136,47 +134,48 @@ int  mac_open(struct net_device *ndev);
 int  mac_close(struct net_device *ndev);
 static struct net_device_stats *mac_stats(struct net_device *dev);
 static int  mac_ioctl(struct net_device *ndev, struct ifreq *req, int cmd);
-static void wilc_set_multicast_list(struct net_device *dev);
-
-volatile int gbCrashRecover = 0;
-volatile int g_bWaitForRecovery = 0;
-
+static void atwilc_set_multicast_list(struct net_device *dev);
 void linux_wlan_free_firmware(void);
 
 linux_wlan_t* g_linux_wlan = NULL;
-wilc_wlan_oup_t* gpstrWlanOps;
-WILC_Bool bEnablePS = WILC_TRUE;
+atwilc_wlan_oup_t* gpstrWlanOps;
+ATL_Bool bEnablePS = ATL_TRUE;
+
+/*TicketId1003*/
+extern uint32_t cfg_timed_out_cnt;
+volatile int gbCrashRecover = 0;
+volatile int g_bWaitForRecovery = 0;
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(3,2,0)
-static const struct net_device_ops wilc_netdev_ops = {
+static const struct net_device_ops atwilc_netdev_ops = {
 	.ndo_init = mac_init_fn,
 	.ndo_open = mac_open,
 	.ndo_stop = mac_close,
 	.ndo_start_xmit = mac_xmit,
 	.ndo_do_ioctl = mac_ioctl,
 	.ndo_get_stats = mac_stats,
-	.ndo_set_rx_mode  = wilc_set_multicast_list,
+	.ndo_set_rx_mode  = atwilc_set_multicast_list,
 	
 };
-#define wilc_set_netdev_ops(ndev) do { (ndev)->netdev_ops = &wilc_netdev_ops; } while(0)
+#define atwilc_set_netdev_ops(ndev) do { (ndev)->netdev_ops = &atwilc_netdev_ops; } while(0)
 #elif LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,29)
 
-static const struct net_device_ops wilc_netdev_ops = {
+static const struct net_device_ops atwilc_netdev_ops = {
 	.ndo_init = mac_init_fn,
 	.ndo_open = mac_open,
 	.ndo_stop = mac_close,
 	.ndo_start_xmit = mac_xmit,
 	.ndo_do_ioctl = mac_ioctl,
 	.ndo_get_stats = mac_stats,
-	.ndo_set_multicast_list = wilc_set_multicast_list,
+	.ndo_set_multicast_list = atwilc_set_multicast_list,
 	
 };
 
-#define wilc_set_netdev_ops(ndev) do { (ndev)->netdev_ops = &wilc_netdev_ops; } while(0)
+#define atwilc_set_netdev_ops(ndev) do { (ndev)->netdev_ops = &atwilc_netdev_ops; } while(0)
 
 #else
 
-static void wilc_set_netdev_ops(struct net_device *ndev)
+static void atwilc_set_netdev_ops(struct net_device *ndev)
 {
 
 	ndev->init = mac_init_fn;
@@ -185,7 +184,7 @@ static void wilc_set_netdev_ops(struct net_device *ndev)
 	ndev->hard_start_xmit = mac_xmit;
 	ndev->do_ioctl = mac_ioctl;
 	ndev->get_stats = mac_stats;
-	ndev->set_multicast_list = wilc_set_multicast_list,
+	ndev->set_multicast_list = atwilc_set_multicast_list,
 }
 
 #endif
@@ -232,22 +231,17 @@ void Reset_WatchDogdebugger()
 {
 	WatchDogdebuggerCounter=0;
 }
-
 #endif
 
-int bDebugThreadRunning = 0;
 
+int bDebugThreadRunning = 0;
 static int DebuggingThreadTask(void* vp)
 {
-	//static uint8_t rssI_failure_count = 0;
-	struct WILC_WFI_priv* priv;
-	perInterface_wlan_t* nic;
 	int timeout = 100;
-	static uint32_t tst = 1;
 	int i = 0;	
 	while(bDebugThreadRunning)
 	{
-		if(g_linux_wlan->wilc1000_initialized)
+		if(g_linux_wlan->atwilc_initialized)
 		{
 			printk("*** Debug Thread Running ***\n");
 			if(!linux_wlan_lock_timeout(&g_linux_wlan->wdt_thread_ended,6000))
@@ -260,15 +254,7 @@ static int DebuggingThreadTask(void* vp)
 
 			if(bDebugThreadRunning)
 			{			
-				priv = wiphy_priv(g_linux_wlan->strInterfaceInfo[0].wilc_netdev->ieee80211_ptr->wiphy);
-				#if 0
-				printk(" == get RSSI ==[%d]\n",tst);
-				if(Handle_GetRssi())
-					rssI_failure_count++;  
-				else
-					rssI_failure_count = 0;  
-				#endif
-				if(cfg_timed_out_cnt >= 5) // || !(tst++%20))
+				if(cfg_timed_out_cnt >= 5)
 				{
 					cfg_timed_out_cnt = 0;					
 					timeout = 10;
@@ -276,53 +262,29 @@ static int DebuggingThreadTask(void* vp)
 					gbCrashRecover = 1;
 					g_bWaitForRecovery = 1;
 					
-					printk("\n\n<<<<<>>>>>\n\n");
-					mac_close(g_linux_wlan->strInterfaceInfo[0].wilc_netdev);
-#if 0					
-					linux_wlan_device_power(0);
-					mdelay(100);					
-					linux_wlan_device_power(1);
-					mdelay(250);
-					//printk(">> Calling custom_spi_init\n");
-					custom_spi_init();
-					//printk(">> Done custom_spi_init\n");
-					mdelay(150);
-					//printk(">> Calling mac_open()\n");
-#endif
-					/* Always recover P2P interface first because 
-					mac_open for STA will mac_open P2P interface
-					for A31 and other tablets with similar behaviour
-					*/
-					nic = netdev_priv(g_linux_wlan->strInterfaceInfo[1].wilc_netdev);
-					if(nic->mac_opened==1){
-						timeout = 10;
-						while(mac_open(g_linux_wlan->strInterfaceInfo[1].wilc_netdev)&&--timeout);
+					printk("\n\n<<<<< Recover >>>>>\n\n");
+
+					/*TicketId1003*/
+					/*Close all interfaces*/
+					for(i=0; i<NUM_CONCURRENT_IFC; i++)
+					{
+						mac_close(g_linux_wlan->strInterfaceInfo[i].atwilc_netdev);
+					}
+
+					/*Open all interfaces (First, open P2P interface, then WLAN interface)*/
+					for(i=NUM_CONCURRENT_IFC; i>0; i--)
+					{
+						while(mac_open(g_linux_wlan->strInterfaceInfo[i-1].atwilc_netdev)&&--timeout);
 						{
 							msleep(100);
 						}
 						if(timeout == 0)
 						{
-							printk("couldn't restart P2P again :(");
+							printk("Couldn't restart interface %d again \n", i);
 						}
 					}
-					
-					while(mac_open(g_linux_wlan->strInterfaceInfo[0].wilc_netdev)&&--timeout);
-					{
-						msleep(100);
-					}
-					if(timeout == 0)
-					{
-						printk("couldn't restart again :(");
-						gbCrashRecover = 0;
-						g_bWaitForRecovery = 0;
-					}
-					gbCrashRecover = 0;
-					/*Reprogram GPIO values*/
-					
-					//custom_gpio_reprogram();
-					
-				}	
-				
+					gbCrashRecover = 0;		
+				}				
 			}		
 		}
 		else
@@ -334,24 +296,22 @@ static int DebuggingThreadTask(void* vp)
 }
 
 
-
-
 #ifdef DISABLE_PWRSAVE_AND_SCAN_DURING_IP
 static int dev_state_ev_handler(struct notifier_block *this, unsigned long event, void *ptr)
 {
 	struct in_ifaddr *dev_iface = (struct in_ifaddr *)ptr;
-	struct WILC_WFI_priv* priv;
-	tstrWILC_WFIDrv * pstrWFIDrv;
+	struct ATWILC_WFI_priv* priv;
+	tstrATWILC_WFIDrv * pstrWFIDrv;
 	struct net_device * dev;
-	WILC_Uint8 *pIP_Add_buff;
-	WILC_Sint32 s32status = WILC_FAIL;
+	ATL_Uint8 *pIP_Add_buff;
+	ATL_Sint32 s32status = ATL_FAIL;
 	perInterface_wlan_t* nic;
-	WILC_Uint8 null_ip[4]={0};
+	ATL_Uint8 null_ip[4]={0};
 	char wlan_dev_name[5]="wlan0";
 
 	if(dev_iface == NULL || dev_iface->ifa_dev == NULL || dev_iface->ifa_dev->dev == NULL)
 	{
-		WILC_PRINTF("dev_iface = NULL\n");
+		ATL_PRINTF("dev_iface = NULL\n");
 		return NOTIFY_DONE;
 	}
 	
@@ -364,22 +324,22 @@ static int dev_state_ev_handler(struct notifier_block *this, unsigned long event
 	dev  = (struct net_device *)dev_iface->ifa_dev->dev;
 	if(dev->ieee80211_ptr == NULL || dev->ieee80211_ptr->wiphy == NULL)
 	{
-		WILC_PRINTF("No Wireless registerd\n");
+		ATL_PRINTF("No Wireless registerd\n");
 		return NOTIFY_DONE;
 	}
 	
    	 priv = wiphy_priv(dev->ieee80211_ptr->wiphy);
 	if(priv == NULL)
 	{
-		WILC_PRINTF("No Wireless Priv\n");
+		ATL_PRINTF("No Wireless Priv\n");
 		return NOTIFY_DONE;
 	}
 	
-	pstrWFIDrv = (tstrWILC_WFIDrv *)priv->hWILCWFIDrv;
+	pstrWFIDrv = (tstrATWILC_WFIDrv *)priv->hATWILCWFIDrv;
 	nic = netdev_priv(dev);
 	if(nic == NULL || pstrWFIDrv == NULL)
 	{
-		WILC_PRINTF("No Wireless Priv\n");
+		ATL_PRINTF("No Wireless Priv\n");
 		return NOTIFY_DONE;
 	}
 	printk("dev_state_ev_handler +++\n");	// tony	
@@ -394,19 +354,19 @@ static int dev_state_ev_handler(struct notifier_block *this, unsigned long event
 			if(nic->iftype==STATION_MODE||nic->iftype==CLIENT_MODE)	
 			{	
 				pstrWFIDrv->IFC_UP=1;
-				g_obtainingIP=WILC_FALSE;
-				WILC_TimerStop(&hDuringIpTimer, WILC_NULL);
+				g_obtainingIP=ATL_FALSE;
+				ATL_TimerStop(&hDuringIpTimer, ATL_NULL);
 				PRINT_D(GENERIC_DBG,"IP obtained , enable scan\n");
 			}
 
-			if(bEnablePS	== WILC_TRUE)
-			  	host_int_set_power_mgmt((WILC_WFIDrvHandle)pstrWFIDrv, 1, 0);
+			if(bEnablePS	== ATL_TRUE)
+			  	host_int_set_power_mgmt((ATWILC_WFIDrvHandle)pstrWFIDrv, 1, 0);
 
                 	PRINT_D(GENERIC_DBG, "[%s] Up IP\n", dev_iface->ifa_label);
 
 			pIP_Add_buff = (char *) (&(dev_iface->ifa_address));
 			printk("IP add=%d:%d:%d:%d \n",pIP_Add_buff[0],pIP_Add_buff[1],pIP_Add_buff[2],pIP_Add_buff[3]);
-			s32status = host_int_setup_ipaddress((WILC_WFIDrvHandle)pstrWFIDrv, pIP_Add_buff, nic->u8IfIdx);
+			s32status = host_int_setup_ipaddress((ATWILC_WFIDrvHandle)pstrWFIDrv, pIP_Add_buff, nic->u8IfIdx);
 
                 	break;
 
@@ -417,18 +377,18 @@ static int dev_state_ev_handler(struct notifier_block *this, unsigned long event
 			if(nic->iftype==STATION_MODE||nic->iftype==CLIENT_MODE)	
 			{
 				pstrWFIDrv->IFC_UP=0;
-			 	g_obtainingIP=WILC_FALSE;
+			 	g_obtainingIP=ATL_FALSE;
 			}
 
 			if(memcmp(dev_iface->ifa_label , wlan_dev_name, 5) == 0)
-		   		host_int_set_power_mgmt((WILC_WFIDrvHandle)pstrWFIDrv, 0, 0);
+		   		host_int_set_power_mgmt((ATWILC_WFIDrvHandle)pstrWFIDrv, 0, 0);
 				
 			resolve_disconnect_aberration(pstrWFIDrv);	  	
                 	PRINT_D(GENERIC_DBG, "[%s] Down IP\n", dev_iface->ifa_label);
 
 			pIP_Add_buff = null_ip;
 			printk("IP add=%d:%d:%d:%d \n",pIP_Add_buff[0],pIP_Add_buff[1],pIP_Add_buff[2],pIP_Add_buff[3]);
-		  	s32status = host_int_setup_ipaddress((WILC_WFIDrvHandle)pstrWFIDrv, pIP_Add_buff, nic->u8IfIdx);
+		  	s32status = host_int_setup_ipaddress((ATWILC_WFIDrvHandle)pstrWFIDrv, pIP_Add_buff, nic->u8IfIdx);
 
                 	break;
 				
@@ -449,7 +409,7 @@ static int dev_state_ev_handler(struct notifier_block *this, unsigned long event
 void linux_wlan_enable_irq(void){
 
 #if (RX_BH_TYPE != RX_BH_THREADED_IRQ)
-#if (!defined WILC_SDIO) || (defined WILC_SDIO_IRQ_GPIO)
+#if (!defined ATWILC_SDIO) || (defined ATWILC_SDIO_IRQ_GPIO)
 	PRINT_D(INT_DBG,"Enabling IRQ ...\n");
 	enable_irq(g_linux_wlan->dev_irq_num);
 #endif
@@ -457,7 +417,7 @@ void linux_wlan_enable_irq(void){
 }
 
 void linux_wlan_disable_irq(int wait){
-#if (!defined WILC_SDIO) || (defined WILC_SDIO_IRQ_GPIO)
+#if (!defined ATWILC_SDIO) || (defined ATWILC_SDIO_IRQ_GPIO)
 	if(wait){
 		PRINT_D(INT_DBG,"Disabling IRQ ...\n");
 		disable_irq(g_linux_wlan->dev_irq_num);
@@ -467,7 +427,7 @@ void linux_wlan_disable_irq(int wait){
 			}
 #endif
 }
-#if (!defined WILC_SDIO) || (defined WILC_SDIO_IRQ_GPIO)
+#if (!defined ATWILC_SDIO) || (defined ATWILC_SDIO_IRQ_GPIO)
 static irqreturn_t isr_uh_routine(int irq, void* user_data){
 	
 	int_rcvdU++;
@@ -568,7 +528,7 @@ static int isr_bh_routine(void *vp)
 #endif
 
 
-#if (!defined WILC_SDIO) || (defined WILC_SDIO_IRQ_GPIO)
+#if (!defined ATWILC_SDIO) || (defined ATWILC_SDIO_IRQ_GPIO)
 static int init_irq(linux_wlan_t* p_nic){
 	int ret = 0;
 	linux_wlan_t *nic = p_nic;
@@ -576,10 +536,10 @@ static int init_irq(linux_wlan_t* p_nic){
 	
 		/*initialize GPIO and register IRQ num*/						
 		/*GPIO request*/
-		if ((gpio_request(GPIO_NUM, "WILC_INTR") == 0) &&
+		if ((gpio_request(GPIO_NUM, "ATWILC_INTR") == 0) &&
 		    (gpio_direction_input(GPIO_NUM) == 0)) {
 #if defined (NM73131_0_BOARD)
-			g_linux_wlan->dev_irq_num = IRQ_WILC1000;
+			g_linux_wlan->dev_irq_num = IRQ_ATWILC;
 #else
 			gpio_export(GPIO_NUM, 1);
 			nic->dev_irq_num = OMAP_GPIO_IRQ(GPIO_NUM);
@@ -587,19 +547,19 @@ static int init_irq(linux_wlan_t* p_nic){
 #endif
 		} else {
 			ret = -1;
-			PRINT_ER("could not obtain gpio for WILC_INTR\n");
+			PRINT_ER("could not obtain gpio for ATWILC_INTR\n");
 		}
 
 
 #if (RX_BH_TYPE == RX_BH_THREADED_IRQ)
 		if( (ret != -1) && ( request_threaded_irq(g_linux_wlan->dev_irq_num, isr_uh_routine, isr_bh_routine,
 				  				IRQF_TRIGGER_LOW | IRQF_ONESHOT, /*Without IRQF_ONESHOT the uh will remain kicked in and dont gave a chance to bh*/
-				   				"WILC_IRQ", nic))<0){
+				   				"ATWILC_IRQ", nic))<0){
 
 #else
 		/*Request IRQ*/
 		if( (ret != -1) && (request_irq(nic->dev_irq_num, isr_uh_routine,
-				IRQF_TRIGGER_LOW, "WILC_IRQ", nic) < 0)){
+				IRQF_TRIGGER_LOW, "ATWILC_IRQ", nic) < 0)){
 
 #endif
 				PRINT_ER("Failed to request IRQ for GPIO: %d\n",GPIO_NUM);
@@ -616,7 +576,7 @@ static int init_irq(linux_wlan_t* p_nic){
 #endif
 
 static void deinit_irq(linux_wlan_t* nic){
-	#if (!defined WILC_SDIO) || (defined WILC_SDIO_IRQ_GPIO)
+	#if (!defined ATWILC_SDIO) || (defined ATWILC_SDIO_IRQ_GPIO)
 		/* Deintialize IRQ */
 		if(&g_linux_wlan->dev_irq_num != 0){
 		  free_irq(g_linux_wlan->dev_irq_num, g_linux_wlan);
@@ -632,16 +592,16 @@ static void linux_wlan_mac_indicate(int flag){
 	linux_wlan_t *pd = g_linux_wlan;
 	int status;
 	
-	if (flag == WILC_MAC_INDICATE_STATUS) {		
+	if (flag == ATWILC_MAC_INDICATE_STATUS) {		
 		pd->oup.wlan_cfg_get_value(WID_STATUS, (unsigned char*)&status, 4);
-		if (pd->mac_status == WILC_MAC_STATUS_INIT) {
+		if (pd->mac_status == ATWILC_MAC_STATUS_INIT) {
 			pd->mac_status = status;
 			linux_wlan_unlock(&pd->sync_event);
 		} else {
 			pd->mac_status = status;
 		}
 
-		if (pd->mac_status == WILC_MAC_STATUS_CONNECT) {	/* Connect */
+		if (pd->mac_status == ATWILC_MAC_STATUS_CONNECT) {	/* Connect */
 #if 0
 			/**
 				get the mac and bssid address
@@ -666,11 +626,66 @@ static void linux_wlan_mac_indicate(int flag){
 #endif
 		}
 
-	} else if (flag == WILC_MAC_INDICATE_SCAN) {
+	} else if (flag == ATWILC_MAC_INDICATE_SCAN) {
 		PRINT_D(GENERIC_DBG,"Scanning ...\n");
 
 	}
 
+}
+
+/*TicketId1001*/
+/*Free buffered eapol allocated in priv struct*/
+void free_EAP_buff_params(void* pUserVoid)
+{
+	struct ATWILC_WFI_priv *priv;
+	priv = (struct ATWILC_WFI_priv *)pUserVoid;
+	
+	/*Free allocated memory for buffered frame*/
+	if(priv->pStrBufferedEAP != NULL)
+	{
+		if(priv->pStrBufferedEAP->pu8buff != NULL)
+		{
+			ATL_FREE(priv->pStrBufferedEAP->pu8buff);
+			priv->pStrBufferedEAP->pu8buff = NULL;
+		}
+		ATL_FREE(priv->pStrBufferedEAP);
+		priv->pStrBufferedEAP = NULL;
+	}
+}
+
+/*TicketId1001*/
+/*Timeout function for a bufferd eapol 1/4*/
+/*The function checks if successful connection is reported to upper layer,*/
+/*then pass buffered eapol 1/4*/
+extern ATL_TimerHandle hEAPFrameBuffTimer;
+void EAP_buff_timeout(void* pUserVoid)
+{
+	unsigned char null_bssid[ETH_ALEN] = {0};
+	static unsigned char timeout = 5;
+	signed int status = ATL_FAIL;
+	struct ATWILC_WFI_priv *priv;
+	priv = (struct ATWILC_WFI_priv *)pUserVoid;
+
+	/*If successful connection is not yet reported, keep waiting*/
+	if(!(memcmp(priv->au8AssociatedBss, null_bssid, ETH_ALEN)) && (timeout-- > 0))
+	{
+		ATL_TimerStart(&hEAPFrameBuffTimer, 10, pUserVoid, ATL_NULL);
+		return;
+	}
+	timeout = 5;
+	
+	/*Pass frame to upper layer through host interface thread*/
+	status = host_int_send_buffered_eap(priv->hATWILCWFIDrv
+										, frmw_to_linux
+										, free_EAP_buff_params
+										, priv->pStrBufferedEAP->pu8buff
+										, priv->pStrBufferedEAP->u32Size
+										, priv->pStrBufferedEAP->u32PktOffset
+										, (void*)priv);
+	if(status)
+	{
+		PRINT_ER("Failed so send buffered eap\n");
+	}
 }
 
 struct net_device * GetIfHandler(uint8_t* pMacHeader)
@@ -686,8 +701,8 @@ struct net_device * GetIfHandler(uint8_t* pMacHeader)
 		if(!memcmp(Bssid1,g_linux_wlan->strInterfaceInfo[i].aBSSID,ETH_ALEN) || 
 			!memcmp(Bssid,g_linux_wlan->strInterfaceInfo[i].aBSSID,ETH_ALEN))
 		{
-			//printk("Ctx [%x]\n",g_linux_wlan->strInterfaceInfo[i].wilc_netdev);
-			return g_linux_wlan->strInterfaceInfo[i].wilc_netdev;
+			//printk("Ctx [%x]\n",g_linux_wlan->strInterfaceInfo[i].atwilc_netdev);
+			return g_linux_wlan->strInterfaceInfo[i].atwilc_netdev;
 		}		
 	}
 	printk("Invalide handle\n");
@@ -704,8 +719,8 @@ struct net_device * GetIfHandler(uint8_t* pMacHeader)
 		if(!memcmp(Bssid1,g_linux_wlan->strInterfaceInfo[i].aBSSID,ETH_ALEN) || 
 			!memcmp(Bssid,g_linux_wlan->strInterfaceInfo[i].aBSSID,ETH_ALEN))
 		{
-			printk("Ctx [%p]\n",g_linux_wlan->strInterfaceInfo[i].wilc_netdev);
-			return g_linux_wlan->strInterfaceInfo[i].wilc_netdev;
+			printk("Ctx [%p]\n",g_linux_wlan->strInterfaceInfo[i].atwilc_netdev);
+			return g_linux_wlan->strInterfaceInfo[i].atwilc_netdev;
 		}		
 	}
 	printk("\n");
@@ -713,14 +728,14 @@ struct net_device * GetIfHandler(uint8_t* pMacHeader)
 	return NULL;
 }
 
-int linux_wlan_set_bssid(struct net_device * wilc_netdev,uint8_t * pBSSID)
+int linux_wlan_set_bssid(struct net_device * atwilc_netdev,uint8_t * pBSSID)
 {
 	int i = 0;
 	int ret = -1;
-	printk("set bssid on[%p]\n",wilc_netdev);
+	printk("set bssid on[%p]\n",atwilc_netdev);
 	for(i=0;i<g_linux_wlan->u8NoIfcs;i++)
 	{
-		if(g_linux_wlan->strInterfaceInfo[i].wilc_netdev == wilc_netdev)
+		if(g_linux_wlan->strInterfaceInfo[i].atwilc_netdev == atwilc_netdev)
 		{
 			printk("set bssid [%x][%x][%x]\n",pBSSID[0],pBSSID[1],pBSSID[2]);
 			memcpy(g_linux_wlan->strInterfaceInfo[i].aBSSID,pBSSID,6);
@@ -751,7 +766,7 @@ int linux_wlan_get_num_conn_ifcs(void)
 
 static int linux_wlan_rxq_task(void* vp){
 
-	/* inform wilc1000_wlan_init that RXQ task is started. */
+	/* inform atwilc_wlan_init that RXQ task is started. */
 	linux_wlan_unlock(&g_linux_wlan->rxq_thread_started);
 	while(1) {
 		linux_wlan_lock(&g_linux_wlan->rxq_event);
@@ -790,7 +805,7 @@ static int linux_wlan_txq_task(void* vp)
 	signed long timeout;
 #endif
 
-	/* inform wilc1000_wlan_init that TXQ task is started. */
+	/* inform atwilc_wlan_init that TXQ task is started. */
 	linux_wlan_unlock(&g_linux_wlan->txq_thread_started);
 	while(1) {
 		
@@ -815,17 +830,17 @@ static int linux_wlan_txq_task(void* vp)
 #else
 		do {
 			ret = g_linux_wlan->oup.wlan_handle_tx_que(&txq_count);	
-			if(txq_count < FLOW_CONTROL_LOWER_THRESHOLD/* && netif_queue_stopped(pd->wilc_netdev)*/)
+			if(txq_count < FLOW_CONTROL_LOWER_THRESHOLD/* && netif_queue_stopped(pd->atwilc_netdev)*/)
 			{
 				PRINT_D(TX_DBG,"Waking up queue\n");
-				//netif_wake_queue(pd->wilc_netdev);
-				if(netif_queue_stopped(g_linux_wlan->strInterfaceInfo[0].wilc_netdev))
-					netif_wake_queue(g_linux_wlan->strInterfaceInfo[0].wilc_netdev);
-				if(netif_queue_stopped(g_linux_wlan->strInterfaceInfo[1].wilc_netdev))
-					netif_wake_queue(g_linux_wlan->strInterfaceInfo[1].wilc_netdev);
+				//netif_wake_queue(pd->atwilc_netdev);
+				if(netif_queue_stopped(g_linux_wlan->strInterfaceInfo[0].atwilc_netdev))
+					netif_wake_queue(g_linux_wlan->strInterfaceInfo[0].atwilc_netdev);
+				if(netif_queue_stopped(g_linux_wlan->strInterfaceInfo[1].atwilc_netdev))
+					netif_wake_queue(g_linux_wlan->strInterfaceInfo[1].atwilc_netdev);
 			}
 
-			if(ret == WILC_TX_ERR_NO_BUF) { /* failed to allocate buffers in chip. */
+			if(ret == ATWILC_TX_ERR_NO_BUF) { /* failed to allocate buffers in chip. */
 				timeout = msecs_to_jiffies(TX_BACKOFF_WEIGHT_UNIT_MS << backoff_weight);
 				do {
 					/* Back off from sending packets for some time. */
@@ -847,7 +862,7 @@ static int linux_wlan_txq_task(void* vp)
 				}
 			}
 			/*TODO: drop packets after a certain time/number of retry count. */
-		} while(ret == WILC_TX_ERR_NO_BUF&&!g_linux_wlan->close); /* retry sending packets if no more buffers in chip. */
+		} while(ret == ATWILC_TX_ERR_NO_BUF&&!g_linux_wlan->close); /* retry sending packets if no more buffers in chip. */
 #endif
 	}
 	return 0;
@@ -856,14 +871,13 @@ static int linux_wlan_txq_task(void* vp)
 static void linux_wlan_rx_complete(void){
 	PRINT_D(RX_DBG,"RX completed\n");
 }
-extern struct device *dev;
 int linux_wlan_get_firmware(perInterface_wlan_t* p_nic){
 
 	perInterface_wlan_t* nic = p_nic;
 	int ret = 0;	
-	const struct firmware* wilc_firmware;
+	const struct firmware* atwilc_firmware;
 #ifdef DOWNLOAD_BT_FW
-	const struct firmware* wilc_bt_firmware;
+	const struct firmware* atwilc_bt_firmware;
 #endif
 	char *firmware;
 	
@@ -887,43 +901,42 @@ int linux_wlan_get_firmware(perInterface_wlan_t* p_nic){
 		goto _fail_;
 	}
 
-	if(&nic->wilc_netdev->dev == NULL){ 
-		PRINT_ER("&nic->wilc_netdev->dev  is NULL\n");
+	if(&nic->atwilc_netdev->dev == NULL){ 
+		PRINT_ER("&nic->atwilc_netdev->dev  is NULL\n");
 		goto _fail_;
 	}
 	
 	
 	/*	the firmare should be located in /lib/firmware in 
 		root file system with the name specified above */
-	printk("[linux_wlan.c] WLAN firmware: %s\n", firmware);
-#ifdef WILC_SDIO
-	if( request_firmware(&wilc_firmware,firmware, dev) != 0){
+	PRINT_WRN(PWRDEV_DBG, "WLAN firmware: %s\n", firmware);
+#ifdef ATWILC_SDIO
+	if( request_firmware(&atwilc_firmware,firmware, &g_linux_wlan->atwilc_sdio_func->dev) != 0){
 		PRINT_ER("%s - firmare not available\n",firmware);
 		ret = -1;
 		goto _fail_;
 	}
 #ifdef DOWNLOAD_BT_FW
-	printk("[linux_wlan.c] Bluetooth firmware: %s\n", BT_FIRMWARE);
-	if( request_firmware(&wilc_bt_firmware,BT_FIRMWARE, dev) != 0){
+	if( request_firmware(&atwilc_bt_firmware,BT_FIRMWARE, &g_linux_wlan->atwilc_sdio_func->dev) != 0){
 		PRINT_ER("%s - firmare not available. Skip!\n",firmware);
 	}
 #endif	
 #else
-	if( request_firmware(&wilc_firmware,firmware, &dev) != 0){
+	if( request_firmware(&atwilc_firmware,firmware, &g_linux_wlan->atwilc_spidev->dev) != 0){
 		PRINT_ER("%s - firmare not available\n",firmware);
 		ret = -1;
 		goto _fail_;
 	}
 #ifdef DOWNLOAD_BT_FW
-	printk("[linux_wlan.c] Bluetooth firmware: %s\n", BT_FIRMWARE);
-	if( request_firmware(&wilc_bt_firmware,BT_FIRMWARE, &dev) != 0){
+	PRINT_WRN(PWRDEV_DBG, "Bluetooth firmware: %s\n", BT_FIRMWARE);
+	if( request_firmware(&atwilc_bt_firmware,BT_FIRMWARE, &g_linux_wlan->atwilc_spidev->dev) != 0){
 		PRINT_ER("%s - firmare not available. Skip\n",BT_FIRMWARE);
 	}
 #endif	
 #endif
-	g_linux_wlan->wilc_firmware = wilc_firmware; /* Bug 4703 */
+	g_linux_wlan->atwilc_firmware = atwilc_firmware; /* Bug 4703 */
 #ifdef DOWNLOAD_BT_FW
-	g_linux_wlan->wilc_bt_firmware = wilc_bt_firmware;
+	g_linux_wlan->atwilc_bt_firmware = atwilc_bt_firmware;
 #endif	
 
 _fail_:
@@ -933,7 +946,6 @@ _fail_:
 }
 	
 
-//int repeat_power_cycle(perInterface_wlan_t* nic);
 
 static int linux_wlan_start_firmware(perInterface_wlan_t* nic){
 
@@ -970,7 +982,7 @@ static int linux_wlan_firmware_download(linux_wlan_t* p_nic){
 
 	int ret = 0;	
 
-	if(g_linux_wlan->wilc_firmware == NULL){
+	if(g_linux_wlan->atwilc_firmware == NULL){
 		PRINT_ER("Firmware buffer is NULL\n");
 		ret = -ENOBUFS;
 		goto _FAIL_;
@@ -979,7 +991,7 @@ static int linux_wlan_firmware_download(linux_wlan_t* p_nic){
 		do the firmware download
 	**/
 	PRINT_D(INIT_DBG,"Downloading Firmware ...\n");
-	ret = g_linux_wlan->oup.wlan_firmware_download(g_linux_wlan->wilc_firmware->data, g_linux_wlan->wilc_firmware->size);
+	ret = g_linux_wlan->oup.wlan_firmware_download(g_linux_wlan->atwilc_firmware->data, g_linux_wlan->atwilc_firmware->size);
 	if(ret < 0){
 		goto _FAIL_;
 	}
@@ -1016,7 +1028,7 @@ static int linux_bt_firmware_download(linux_wlan_t* p_nic){
 
 	int ret = 0;	
 
-	if(g_linux_wlan->wilc_bt_firmware == NULL){
+	if(g_linux_wlan->atwilc_bt_firmware == NULL){
 		PRINT_ER("BT Firmware buffer is NULL\n");
 		ret = -ENOBUFS;
 		goto _FAIL_;
@@ -1025,7 +1037,7 @@ static int linux_bt_firmware_download(linux_wlan_t* p_nic){
 		do the firmware download
 	**/
 	PRINT_D(INIT_DBG,"Downloading BT Firmware ...\n");
-	ret = g_linux_wlan->oup.bt_firmware_download(g_linux_wlan->wilc_bt_firmware->data, g_linux_wlan->wilc_bt_firmware->size);
+	ret = g_linux_wlan->oup.bt_firmware_download(g_linux_wlan->atwilc_bt_firmware->data, g_linux_wlan->atwilc_bt_firmware->size);
 	if(ret < 0){
 		goto _FAIL_;
 	}
@@ -1033,8 +1045,8 @@ static int linux_bt_firmware_download(linux_wlan_t* p_nic){
 	/* Freeing FW buffer */
 	PRINT_D(INIT_DBG,"Freeing BT FW buffer ...\n");
 	PRINT_D(GENERIC_DBG,"Releasing BT firmware\n");
-	release_firmware(g_linux_wlan->wilc_bt_firmware);
-	g_linux_wlan->wilc_bt_firmware = NULL;
+	release_firmware(g_linux_wlan->atwilc_bt_firmware);
+	g_linux_wlan->atwilc_bt_firmware = NULL;
 
 	PRINT_D(INIT_DBG,"BT Download Succeeded \n");	
 	
@@ -1047,23 +1059,23 @@ _FAIL_:
 static int linux_wlan_init_test_config(struct net_device *dev, linux_wlan_t* p_nic){
 
 	unsigned char c_val[64];
-	unsigned char mac_add[] = {0x00, 0x80, 0xC2, 0x5E, 0xa2, 0xff};
+	unsigned char mac_add[] = {0x00, 0x80, 0xC2, 0x5E, 0xa2, 0xf3};
 	unsigned int chipid = 0;
 
 	/*BugID_5077*/
-	struct WILC_WFI_priv *priv;
-	tstrWILC_WFIDrv * pstrWFIDrv;
+	struct ATWILC_WFI_priv *priv;
+	tstrATWILC_WFIDrv * pstrWFIDrv;
 	
 	PRINT_D(TX_DBG,"Start configuring Firmware\n");
 
 	//get_random_bytes(&mac_add[5], 1);
 
 	priv = wiphy_priv(dev->ieee80211_ptr->wiphy);
-	pstrWFIDrv = (tstrWILC_WFIDrv *)priv->hWILCWFIDrv;
-	PRINT_D(INIT_DBG, "Host = %x\n",(WILC_Uint32)pstrWFIDrv);
+	pstrWFIDrv = (tstrATWILC_WFIDrv *)priv->hATWILCWFIDrv;
+	PRINT_D(INIT_DBG, "Host = %x\n",(ATL_Uint32)pstrWFIDrv);
 
 	PRINT_D(INIT_DBG,"MAC address is : %02x-%02x-%02x-%02x-%02x-%02x\n", mac_add[0],mac_add[1],mac_add[2],mac_add[3],mac_add[4],mac_add[5]);
-	chipid = wilc_get_chipid(0);
+	chipid = atwilc_get_chipid(0);
 
 	
 	if(g_linux_wlan->oup.wlan_cfg_set == NULL)
@@ -1072,12 +1084,12 @@ static int linux_wlan_init_test_config(struct net_device *dev, linux_wlan_t* p_n
 		goto _fail_;
 	}
 
-	*(int*)c_val = (WILC_Uint32)pstrWFIDrv;
+	*(int*)c_val = (ATL_Uint32)pstrWFIDrv;
 
 	if (!g_linux_wlan->oup.wlan_cfg_set(1, WID_SET_DRV_HANDLER, c_val, 4, 0,0))
 		goto _fail_;
 	
-	/*to tell fw that we are going to use PC test - WILC specific*/
+	/*to tell fw that we are going to use PC test - ATWILC specific*/
 	c_val[0] = 0;
 	if (!g_linux_wlan->oup.wlan_cfg_set(0, WID_PC_TEST_MODE, c_val, 1, 0,0))
 		goto _fail_;
@@ -1312,9 +1324,9 @@ static int linux_wlan_init_test_config(struct net_device *dev, linux_wlan_t* p_n
 		goto _fail_;
 
 	c_val[0] = 1; /* Enable N with immediate block ack. */
-	if (!g_linux_wlan->oup.wlan_cfg_set(0, WID_11N_IMMEDIATE_BA_ENABLED, c_val, 1, 1,(WILC_Uint32)pstrWFIDrv))
+	if (!g_linux_wlan->oup.wlan_cfg_set(0, WID_11N_IMMEDIATE_BA_ENABLED, c_val, 1, 1,(ATL_Uint32)pstrWFIDrv))
 		goto _fail_;
-#ifdef WILC1000_BT_COEXISTENCE
+#ifdef ATWILC_BT_COEXISTENCE
 	c_val[0] = 0; /* Disable coexistence in the initialization */
 	if (!g_linux_wlan->oup.wlan_cfg_set(0, WID_BT_COEX_MODE, c_val, 1, 0, 0))
 		goto _fail_;
@@ -1328,35 +1340,35 @@ _fail_:
 
 
 /**************************/
-void wilc1000_wlan_deinit(linux_wlan_t *nic, uint8_t power_down) {
+void atwilc_wlan_deinit(linux_wlan_t *nic) {
   
-	if(g_linux_wlan->wilc1000_initialized)
+	if(g_linux_wlan->atwilc_initialized)
 	{
 
-		PRINT_D(INIT_DBG,"Deinitializing wilc1000  ...\n");
+		PRINT_D(INIT_DBG,"Deinitializing atwilc  ...\n");
 		
 		if(nic == NULL){
 			PRINT_ER("nic is NULL\n");
 			return;
 		}
 
-#if defined(PLAT_ALLWINNER_A20) || defined(PLAT_ALLWINNER_A23) || defined(PLAT_ALLWINNER_A31) || defined(SAMA5D4)
-		// johnny : remove
-		PRINT_D(INIT_DBG,"skip wilc_bus_set_default_speed\n");
+#if defined(PLAT_ALLWINNER_A20) || defined(PLAT_ALLWINNER_A23) || defined(PLAT_ALLWINNER_A31) || defined(PLAT_SAMA5D4)
+
+		PRINT_D(INIT_DBG,"skip atwilc_bus_set_default_speed\n");
 #else
-		wilc_bus_set_default_speed();
+		atwilc_bus_set_default_speed();
 #endif
 
 		PRINT_D(INIT_DBG,"Disabling IRQ\n");
-		#if (!defined WILC_SDIO) || (defined WILC_SDIO_IRQ_GPIO)
+		#if (!defined ATWILC_SDIO) || (defined ATWILC_SDIO_IRQ_GPIO)
 			linux_wlan_disable_irq(IRQ_WAIT);
 		#else			
-		  #if defined(PLAT_ALLWINNER_A20) || defined(PLAT_ALLWINNER_A23) || defined(PLAT_ALLWINNER_A31) || defined(SAMA5D4)
+		  #if defined(PLAT_ALLWINNER_A20) || defined(PLAT_ALLWINNER_A23) || defined(PLAT_ALLWINNER_A31) || defined(PLAT_SAMA5D4)
 
 		  #else
-			linux_wlan_lock_mutex((void*)&g_linux_wlan->hif_cs);
+			linux_wlan_lock_mutex((void*)g_linux_wlan->hif_cs);
 			disable_sdio_interrupt();
-			linux_wlan_unlock_mutex((void*)&g_linux_wlan->hif_cs);
+			linux_wlan_unlock_mutex((void*)g_linux_wlan->hif_cs);
 		  #endif
 		#endif
 		
@@ -1393,33 +1405,29 @@ void wilc1000_wlan_deinit(linux_wlan_t *nic, uint8_t power_down) {
 			g_linux_wlan->oup.wlan_stop();		
 	}
 
-	PRINT_D(INIT_DBG,"Deinitializing WILC Wlan\n");
-	wilc_wlan_deinit(nic);			
-#if (defined WILC_SDIO) && (!defined WILC_SDIO_IRQ_GPIO)
- #if defined(PLAT_ALLWINNER_A20) || defined(PLAT_ALLWINNER_A23) || defined(PLAT_ALLWINNER_A31) || defined(SAMA5D4)
+	PRINT_D(INIT_DBG,"Deinitializing ATWILC Wlan\n");
+	at_wlan_deinit(nic);			
+#if (defined ATWILC_SDIO) && (!defined ATWILC_SDIO_IRQ_GPIO)
+ #if defined(PLAT_ALLWINNER_A20) || defined(PLAT_ALLWINNER_A23) || defined(PLAT_ALLWINNER_A31) || defined(PLAT_SAMA5D4)
     PRINT_D(INIT_DBG,"Disabling IRQ 2\n");
 
     linux_wlan_lock_mutex((void*)g_linux_wlan->hif_cs);
     disable_sdio_interrupt();
     linux_wlan_unlock_mutex((void*)g_linux_wlan->hif_cs);
- #endif
+  #endif
 #endif
 			
 	/*De-Initialize locks*/
 	PRINT_D(INIT_DBG,"Deinitializing Locks\n");
 	wlan_deinit_locks(g_linux_wlan);
-	if(power_down == 1){
-		at_pwr_unregister_bus(PWR_DEV_SRC_WIFI);
-		at_pwr_power_down(PWR_DEV_SRC_WIFI);
-	}
+
+	/* announce that atwilc is not initialized */
+	g_linux_wlan->atwilc_initialized = 0;
 	
-	/* announce that wilc1000 is not initialized */
-	g_linux_wlan->wilc1000_initialized = 0;
-	
-	PRINT_D(INIT_DBG,"wilc1000 deinitialization Done\n");
+	PRINT_D(INIT_DBG,"atwilc deinitialization Done\n");
 		
 	}else{
-		PRINT_D(INIT_DBG,"wilc1000 is not initialized\n");
+		PRINT_D(INIT_DBG,"atwilc is not initialized\n");
 	}
 	return;
 }
@@ -1429,7 +1437,6 @@ int wlan_init_locks(linux_wlan_t* p_nic){
 	PRINT_D(INIT_DBG,"Initializing Locks ...\n");
 	
 	/*initialize mutexes*/
-	//linux_wlan_init_mutex("hif_lock/hif_cs",&g_linux_wlan->hif_cs,1);
 	g_linux_wlan->hif_cs = at_pwr_dev_get_bus_lock();
 	linux_wlan_init_mutex("rxq_lock/rxq_cs",&g_linux_wlan->rxq_cs,1);
 	linux_wlan_init_mutex("txq_lock/txq_cs",&g_linux_wlan->txq_cs,1);
@@ -1448,7 +1455,8 @@ int wlan_init_locks(linux_wlan_t* p_nic){
 
 	linux_wlan_init_lock("rxq_lock/rxq_started",&g_linux_wlan->rxq_thread_started,0);
 	linux_wlan_init_lock("rxq_lock/txq_started",&g_linux_wlan->txq_thread_started,0);
-	linux_wlan_init_lock("wdt_lock/wdt_ended",&g_linux_wlan->wdt_thread_ended,0);
+	linux_wlan_init_lock("wdt_lock/wdt_ended",&g_linux_wlan->wdt_thread_ended,0); //TicketId1003
+
 	#if (RX_BH_TYPE == RX_BH_KTHREAD)
 		linux_wlan_init_lock("BH_SEM", &g_linux_wlan->rx_sem, 0);
 	#endif
@@ -1459,8 +1467,6 @@ int wlan_init_locks(linux_wlan_t* p_nic){
 static int wlan_deinit_locks(linux_wlan_t* nic){
 	PRINT_D(INIT_DBG,"De-Initializing Locks\n");
 	
-//	if(&g_linux_wlan->hif_cs != NULL)
-//		linux_wlan_deinit_mutex(&g_linux_wlan->hif_cs);
 
 	if(&g_linux_wlan->rxq_cs != NULL)
 		linux_wlan_deinit_mutex(&g_linux_wlan->rxq_cs);
@@ -1487,8 +1493,11 @@ static int wlan_deinit_locks(linux_wlan_t* nic){
 
 	if(&g_linux_wlan->txq_thread_started != NULL)
 		linux_wlan_deinit_lock(&g_linux_wlan->txq_thread_started);
+
+	/*TicketId1003*/
 	if(&g_linux_wlan->wdt_thread_ended != NULL)
 		linux_wlan_deinit_lock(&g_linux_wlan->wdt_thread_ended);
+
 	if(&g_linux_wlan->cfg_event != NULL)
 		linux_wlan_deinit_lock(&g_linux_wlan->cfg_event);
 
@@ -1497,7 +1506,7 @@ static int wlan_deinit_locks(linux_wlan_t* nic){
 
 	return 0;
 }
-void linux_to_wlan(wilc_wlan_inp_t* nwi,linux_wlan_t* nic){
+void linux_to_wlan(atwilc_wlan_inp_t* nwi,linux_wlan_t* nic){
 
 	PRINT_D(INIT_DBG,"Linux to Wlan services ...\n");
 	
@@ -1537,28 +1546,16 @@ void linux_to_wlan(wilc_wlan_inp_t* nwi,linux_wlan_t* nic){
 	nwi->os_func.os_spin_lock = linux_wlan_spin_lock;
 	nwi->os_func.os_spin_unlock = linux_wlan_spin_unlock;
 	
-#ifdef WILC_SDIO
+#ifdef ATWILC_SDIO
 	nwi->io_func.io_type = HIF_SDIO;
-	nwi->io_func.io_init = linux_sdio_init;
-	nwi->io_func.io_deinit = linux_sdio_deinit;
-	nwi->io_func.u.sdio.sdio_cmd52 = linux_sdio_cmd52;
-	nwi->io_func.u.sdio.sdio_cmd53 = linux_sdio_cmd53;
-	nwi->io_func.u.sdio.sdio_set_max_speed = linux_sdio_set_max_speed;
-	nwi->io_func.u.sdio.sdio_set_default_speed = linux_sdio_set_default_speed;
 #else
 	nwi->io_func.io_type = HIF_SPI;
-	nwi->io_func.io_init = linux_spi_init;
-	nwi->io_func.io_deinit = linux_spi_deinit;
-	nwi->io_func.u.spi.spi_tx = linux_spi_write;
-	nwi->io_func.u.spi.spi_rx = linux_spi_read;
-	nwi->io_func.u.spi.spi_trx = linux_spi_write_read;
-	nwi->io_func.u.spi.spi_max_speed = linux_spi_set_max_speed;
 #endif
 	
 	/*for now - to be revised*/
-	#ifdef WILC_FULLY_HOSTING_AP
+	#ifdef ATWILC_FULLY_HOSTING_AP
 	/* incase of Fully hosted AP, all non cfg pkts are processed here*/
-	nwi->net_func.rx_indicate = WILC_Process_rx_frame;
+	nwi->net_func.rx_indicate = ATWILC_Process_rx_frame;
 	#else
 	nwi->net_func.rx_indicate = frmw_to_linux;
 	#endif
@@ -1607,7 +1604,8 @@ int wlan_initialize_threads(perInterface_wlan_t* nic){
 		ret = -ENOBUFS;
 		goto _fail_2;
 	}
-#if 1
+
+	/*TicketId1003*/
 	if(bDebugThreadRunning == 0)
 	{		
 		PRINT_D(INIT_DBG,"Creating kthread for Debugging\n");	
@@ -1619,14 +1617,15 @@ int wlan_initialize_threads(perInterface_wlan_t* nic){
 		}
 		bDebugThreadRunning = 1;
 	}
-#endif	
+
 	/* wait for TXQ task to start. */
 	linux_wlan_lock(&g_linux_wlan->txq_thread_started);
 	
 	return 0;
 
+	/*TicketId1003*/
+	/*De-Initialize 3rd thread*/
 	_fail_3:
-		/*De-Initialize 3rd thread*/
 		g_linux_wlan->close = 1;
 		linux_wlan_unlock(&g_linux_wlan->txq_event);
 		kthread_stop(g_linux_wlan->txq_thread);
@@ -1637,21 +1636,25 @@ int wlan_initialize_threads(perInterface_wlan_t* nic){
 		linux_wlan_unlock(&g_linux_wlan->rxq_event);
 		kthread_stop(g_linux_wlan->rxq_thread);
 
+#ifndef TCP_ENHANCEMENTS
 	_fail_1:
 	#if(RX_BH_TYPE == RX_BH_KTHREAD)
 		/*De-Initialize 1st thread*/
 		g_linux_wlan->close = 1;
 		linux_wlan_unlock(&g_linux_wlan->rx_sem);
 		kthread_stop(g_linux_wlan->rx_bh_thread);
+#endif
+		
 	_fail_:
 	#endif
 		g_linux_wlan->close = 0;
 		return ret;	
 }
 
-static void wlan_deinitialize_threads(linux_wlan_t* nic){
-
-		PRINT_D(INIT_DBG,"wlan_deinitalize_threads\n");
+static void wlan_deinitialize_threads(linux_wlan_t* nic)
+{
+	/*TicketId1003*/
+	PRINT_D(INIT_DBG,"wlan_deinitalize_threads\n");
 	if(!gbCrashRecover){
 		PRINT_D(INIT_DBG,"Deinitializing debug Thread\n");
 		bDebugThreadRunning = 0;
@@ -1663,7 +1666,7 @@ static void wlan_deinitialize_threads(linux_wlan_t* nic){
 			nic->wdt_thread = NULL;			
 		}
 	}
-
+	
 	g_linux_wlan->close = 1;
 	PRINT_D(INIT_DBG,"Deinitializing Threads\n");
 	
@@ -1706,33 +1709,33 @@ extern void sw_mci_rescan_card(unsigned id, unsigned insert);
 extern void wifi_pm_power(int on);	// tony to keep allwinner's rule
 
 
-#define WILC1000_SDIO_CARD_ID	3
+#define ATWILC_SDIO_CARD_ID	3
 #define READY_CHECK_THRESHOLD		30
-extern void wilc_wlan_global_reset(void);
-uint8_t wilc1000_prepare_11b_core(wilc_wlan_inp_t *nwi,	wilc_wlan_oup_t *nwo,linux_wlan_t * nic)
+extern void atwilc_wlan_global_reset(void);
+uint8_t atwilc_prepare_11b_core(atwilc_wlan_inp_t *nwi,	atwilc_wlan_oup_t *nwo,linux_wlan_t * nic)
 {
 		uint8_t trials = 0;
 		while((core_11b_ready() && (READY_CHECK_THRESHOLD > (trials++))))
 		{
 			PRINT_D(INIT_DBG,"11b core not ready yet: %u\n",trials);
-			wilc_wlan_deinit(nic);
-			wilc_wlan_global_reset();
-			sdio_unregister_driver(&wilc_bus);	
+			at_wlan_deinit(nic);
+			atwilc_wlan_global_reset();
+			sdio_unregister_driver(&atwilc_bus);	
 			//wifi_pm_power(0);
-			sw_mci_rescan_card(WILC1000_SDIO_CARD_ID, 0);
+			sw_mci_rescan_card(ATWILC_SDIO_CARD_ID, 0);
 			mdelay(100);
 			//wifi_pm_power(1);
-			sw_mci_rescan_card(WILC1000_SDIO_CARD_ID, 1);
-			sdio_register_driver(&wilc_bus);
+			sw_mci_rescan_card(ATWILC_SDIO_CARD_ID, 1);
+			sdio_register_driver(&atwilc_bus);
 				
 			while(!probe)
 			{
 				msleep(100);
 			}
 			probe = 0;			
-			g_linux_wlan->wilc_sdio_func= local_sdio_func;
+			g_linux_wlan->atwilc_sdio_func= local_sdio_func;
 			linux_to_wlan(nwi,nic);
-			wilc_wlan_init(nwi, nwo);
+			at_wlan_init(nwi, nwo);
 		}
 		
 		if(READY_CHECK_THRESHOLD <= trials)
@@ -1748,9 +1751,9 @@ uint8_t wilc1000_prepare_11b_core(wilc_wlan_inp_t *nwi,	wilc_wlan_oup_t *nwo,lin
 int repeat_power_cycle(perInterface_wlan_t* nic)
 {	
 	int ret = 0; 
-	wilc_wlan_inp_t nwi;
-	wilc_wlan_oup_t nwo;
-	sdio_unregister_driver(&wilc_bus);	
+	atwilc_wlan_inp_t nwi;
+	atwilc_wlan_oup_t nwo;
+	sdio_unregister_driver(&atwilc_bus);	
 
     linux_wlan_device_detection(0);
     linux_wlan_device_power(0);
@@ -1760,7 +1763,7 @@ int repeat_power_cycle(perInterface_wlan_t* nic)
     linux_wlan_device_detection(1);
     msleep(20);
 
-	sdio_register_driver(&wilc_bus);
+	sdio_register_driver(&atwilc_bus);
 	
 	//msleep(1000);
 	while(!probe)
@@ -1768,12 +1771,12 @@ int repeat_power_cycle(perInterface_wlan_t* nic)
 		msleep(100);
 	}
 	probe = 0;
-	g_linux_wlan->wilc_sdio_func= local_sdio_func;
+	g_linux_wlan->atwilc_sdio_func= local_sdio_func;
 	linux_to_wlan(&nwi,g_linux_wlan);
-	ret = wilc_wlan_init(&nwi, &nwo);
+	ret = at_wlan_init(&nwi, &nwo);
 	
-	g_linux_wlan->mac_status = WILC_MAC_STATUS_INIT;
-	#if (defined WILC_SDIO) && (!defined WILC_SDIO_IRQ_GPIO)
+	g_linux_wlan->mac_status = ATWILC_MAC_STATUS_INIT;
+	#if (defined ATWILC_SDIO) && (!defined ATWILC_SDIO_IRQ_GPIO)
 		enable_sdio_interrupt();
 	#endif
 
@@ -1805,66 +1808,42 @@ int repeat_power_cycle(perInterface_wlan_t* nic)
 /*Release firmware after downloading and starting it*/
 void linux_wlan_free_firmware(void)
 {
-	if(g_linux_wlan->wilc_firmware== NULL)
+	if(g_linux_wlan->atwilc_firmware== NULL)
 	{
 		PRINT_ER("Firmware not found!\n");
 		return;
 	}
 	PRINT_D(INIT_DBG,"Freeing FW buffer ...\n");
 	PRINT_D(INIT_DBG,"Releasing firmware\n");
-	release_firmware(g_linux_wlan->wilc_firmware);
-	g_linux_wlan->wilc_firmware = NULL;
+	release_firmware(g_linux_wlan->atwilc_firmware);
+	g_linux_wlan->atwilc_firmware = NULL;
 }
 
-int wilc1000_wlan_init(struct net_device *dev,perInterface_wlan_t* p_nic, uint8_t power_up)
+int atwilc_wlan_init(struct net_device *dev,perInterface_wlan_t* p_nic)
 {
-	wilc_wlan_inp_t nwi;
-	wilc_wlan_oup_t nwo;
+	atwilc_wlan_inp_t nwi;
+	atwilc_wlan_oup_t nwo;
 	perInterface_wlan_t* nic = p_nic;
 	int ret = 0;
-	static int timeout = 5;
-	static int pwr_cycle_trials = 5;
+	int timeout = 5;
 	
-	if(!g_linux_wlan->wilc1000_initialized){
-		g_linux_wlan->mac_status = WILC_MAC_STATUS_INIT;	
+	if(!g_linux_wlan->atwilc_initialized){
+		g_linux_wlan->mac_status = ATWILC_MAC_STATUS_INIT;	
 		g_linux_wlan->close = 0;
-		g_linux_wlan->wilc1000_initialized = 0;
+		g_linux_wlan->atwilc_initialized = 0;
 
-	do
-	{
-		if(power_up == 1){
-			at_pwr_power_up(PWR_DEV_SRC_WIFI);
-
-		#ifdef WILC_SDIO
-			ret = at_pwr_register_bus(PWR_DEV_SRC_WIFI);
-			g_linux_wlan->wilc_sdio_func= local_sdio_func;
-		#else
-			ret = at_pwr_register_bus(PWR_DEV_SRC_WIFI);
-			g_linux_wlan->wilc_spidev = wilc_spi_dev;
-		#endif
-		}
-		if(ret < 0)
-		{
-			at_pwr_power_down(PWR_DEV_SRC_WIFI);
-		}
-	}
-	while((ret < 0) && (pwr_cycle_trials-- >0));
-		
-		if(ret < 0)
-			return ret;
-		
 		wlan_init_locks(g_linux_wlan);
 		
 		linux_to_wlan(&nwi,g_linux_wlan);
 
-		ret = wilc_wlan_init(&nwi, &nwo);
+		ret = at_wlan_init(&nwi, &nwo);
 		if (ret < 0) {
-			PRINT_ER("Initializing WILC_Wlan FAILED\n");
+			PRINT_ER("Initializing ATWILC_Wlan FAILED\n");
 			ret = -EIO;
 			goto _fail_locks_;
 		}	
-		printk("WILC Initialization done");
-		memcpy(&g_linux_wlan->oup, &nwo, sizeof(wilc_wlan_oup_t));
+		printk("ATWILC Initialization done");
+		memcpy(&g_linux_wlan->oup, &nwo, sizeof(atwilc_wlan_oup_t));
 
 		/*Save the oup structre into global pointer*/
 		gpstrWlanOps = &g_linux_wlan->oup;
@@ -1874,10 +1853,10 @@ int wilc1000_wlan_init(struct net_device *dev,perInterface_wlan_t* p_nic, uint8_
 		if (ret < 0) {
 			PRINT_ER("Initializing Threads FAILED\n");
 			ret = -EIO;
-			goto _fail_wilc_wlan_;
+			goto _fail_atwilc_wlan_;
 		}	
 #if defined(PLAT_ALLWINNER_A20)
-		if(wilc1000_prepare_11b_core(&nwi,&nwo,g_linux_wlan)){
+		if(atwilc_prepare_11b_core(&nwi,&nwo,g_linux_wlan)){
 			PRINT_ER("11b Core is not ready\n");
 			ret = -EIO;
 			goto _fail_threads_;
@@ -1885,7 +1864,7 @@ int wilc1000_wlan_init(struct net_device *dev,perInterface_wlan_t* p_nic, uint8_
 #endif
 			
 
-#if (!defined WILC_SDIO) || (defined WILC_SDIO_IRQ_GPIO)
+#if (!defined ATWILC_SDIO) || (defined ATWILC_SDIO_IRQ_GPIO)
 		if(init_irq(g_linux_wlan)){
 			PRINT_ER("couldn't initialize IRQ\n");
 			ret = -EIO;
@@ -1893,8 +1872,8 @@ int wilc1000_wlan_init(struct net_device *dev,perInterface_wlan_t* p_nic, uint8_
 		}
 #endif
 
-#if (defined WILC_SDIO) && (!defined WILC_SDIO_IRQ_GPIO)
-		if(enable_sdio_interrupt()){
+#if (defined ATWILC_SDIO) && (!defined ATWILC_SDIO_IRQ_GPIO)
+		if(enable_sdio_interrupt(atwilc_handle_isr)){
 			PRINT_ER("couldn't initialize IRQ\n");
 			ret = -EIO;
 			goto _fail_irq_init_;
@@ -1908,34 +1887,21 @@ int wilc1000_wlan_init(struct net_device *dev,perInterface_wlan_t* p_nic, uint8_
 			goto _fail_irq_enable_;
 		}
 
-		pwr_cycle_trials = 5;
-		timeout = 5;
+
 		/*TicketId908*/
 		/*Keep trying to download+start firmware in case of failures*/
-		/*This to workaround problem of firmware startup being stucked somewhere in turing_on_rf_blocks*/
+		/*This to workaround problem of firmware startup being stuck somewhere in turing_on_rf_blocks*/
 		do
 		{
 			/*Download firmware*/
 			ret = linux_wlan_firmware_download(g_linux_wlan);
 			if(ret < 0){
 				PRINT_ER("Failed to download firmware\n");
+				/* Freeing FW buffer */
+				linux_wlan_free_firmware();
 
 				ret = -EIO;
-				if(pwr_cycle_trials-- == 0){
-					/* Freeing FW buffer */
-					linux_wlan_free_firmware();
-					goto _fail_irq_enable_;
-				}
-				else{
-					acquire_bus(ACQUIRE_ONLY);
-					at_pwr_unregister_bus(PWR_DEV_SRC_WIFI);
-					at_pwr_power_down(PWR_DEV_SRC_WIFI);
-					WILC_Sleep(5);
-					at_pwr_power_up(PWR_DEV_SRC_WIFI);
-					at_pwr_register_bus(PWR_DEV_SRC_WIFI);
-					release_bus(RELEASE_ONLY, PWR_DEV_SRC_WIFI);
-					continue;
-				}
+				goto _fail_irq_enable_;
 			}
 
 			/* Start firmware*/
@@ -1945,20 +1911,9 @@ int wilc1000_wlan_init(struct net_device *dev,perInterface_wlan_t* p_nic, uint8_
 				ret = -EIO;
 				if(timeout-- == 0)
 				{
-					timeout = 5;
-					if(pwr_cycle_trials-- == 0){						
-						/* Freeing FW buffer */
-						linux_wlan_free_firmware();
-						goto _fail_irq_enable_;
-					}else{
-						acquire_bus(ACQUIRE_ONLY);
-						at_pwr_unregister_bus(PWR_DEV_SRC_WIFI);
-						at_pwr_power_down(PWR_DEV_SRC_WIFI);
-						WILC_Sleep(5);
-						at_pwr_power_up(PWR_DEV_SRC_WIFI);
-						at_pwr_register_bus(PWR_DEV_SRC_WIFI);
-						release_bus(RELEASE_ONLY, PWR_DEV_SRC_WIFI);
-					}
+					/* Freeing FW buffer */
+					linux_wlan_free_firmware();
+					goto _fail_irq_enable_;
 				}
 			}
 		}while(ret== -EIO);
@@ -1983,7 +1938,7 @@ int wilc1000_wlan_init(struct net_device *dev,perInterface_wlan_t* p_nic, uint8_
 		
 #endif
 
-		wilc_bus_set_max_speed();
+		atwilc_bus_set_max_speed();
 
 		if (g_linux_wlan->oup.wlan_cfg_get(1, WID_FIRMWARE_VERSION, 1,0))
 		{
@@ -2005,7 +1960,7 @@ int wilc1000_wlan_init(struct net_device *dev,perInterface_wlan_t* p_nic, uint8_
 		}
 		
 
-		g_linux_wlan->wilc1000_initialized = 1;
+		g_linux_wlan->atwilc_initialized = 1;
 		return 0; /*success*/
 
 
@@ -2016,22 +1971,22 @@ int wilc1000_wlan_init(struct net_device *dev,perInterface_wlan_t* p_nic, uint8_
 	}
 
 	_fail_irq_enable_:
-	#if (defined WILC_SDIO) && (!defined WILC_SDIO_IRQ_GPIO)
+	#if (defined ATWILC_SDIO) && (!defined ATWILC_SDIO_IRQ_GPIO)
 		disable_sdio_interrupt();
 	#endif
 	_fail_irq_init_:
-	#if (!defined WILC_SDIO) || (defined WILC_SDIO_IRQ_GPIO)
+	#if (!defined ATWILC_SDIO) || (defined ATWILC_SDIO_IRQ_GPIO)
 		deinit_irq(g_linux_wlan);
 	#endif
 	_fail_threads_:
 		wlan_deinitialize_threads(g_linux_wlan);
-	_fail_wilc_wlan_:
-		wilc_wlan_deinit(g_linux_wlan);
+	_fail_atwilc_wlan_:
+		at_wlan_deinit(g_linux_wlan);
 	_fail_locks_:
 		wlan_deinit_locks(g_linux_wlan);
 		PRINT_ER("WLAN Iinitialization FAILED\n");
 	}else{
-		PRINT_D(INIT_DBG,"wilc1000 already initialized\n");
+		PRINT_D(INIT_DBG,"atwilc already initialized\n");
 	}
 	return ret;
 }
@@ -2067,7 +2022,7 @@ int mac_init_fn(struct net_device *ndev){
 #endif
 
 
-void    WILC_WFI_frame_register(struct wiphy *wiphy,struct net_device *dev,
+void    ATWILC_WFI_frame_register(struct wiphy *wiphy,struct net_device *dev,
            u16 frame_type, bool reg);
 
 /* This fn is called, when this device is setup using ifconfig */
@@ -2082,54 +2037,54 @@ int mac_open(struct net_device *ndev){
 	int status;
 	int ret = 0;
 	int i = 0;	
-	struct WILC_WFI_priv* priv;
+	struct ATWILC_WFI_priv* priv;
 	
 	nic = netdev_priv(ndev);
-	priv = wiphy_priv(nic->wilc_netdev->ieee80211_ptr->wiphy);
+	priv = wiphy_priv(nic->atwilc_netdev->ieee80211_ptr->wiphy);
 	printk("MAC OPEN[%p]\n",ndev);
 
 	#ifdef USE_WIRELESS
+	/*TicketId1003*/
+	/*If recovering from a crash, don't re-init host interface*/
 	if(!gbCrashRecover)
 	{
-		ret = WILC_WFI_InitHostInt(ndev);
+		ret = ATWILC_WFI_InitHostInt(ndev);
 		if(ret < 0)
 		{
-		PRINT_ER("Failed to initialize host interface\n");
+			PRINT_ER("Failed to initialize host interface\n");
 
-		return  ret;
+			return  ret;
 		}
-	}
-	else
-	{	
-	
 	}
 	#endif
 	
 	/*initialize platform*/
 	PRINT_D(INIT_DBG,"*** re-init ***\n");
-	ret = wilc1000_wlan_init(ndev, nic, 1);
+	ret = atwilc_wlan_init(ndev, nic);
 	if(ret < 0)
 	{
-		PRINT_ER("Failed to initialize wilc1000\n");
-		WILC_WFI_DeInitHostInt(ndev);
+		PRINT_ER("Failed to initialize atwilc\n");
+		ATWILC_WFI_DeInitHostInt(ndev);
 		return  ret;
 	}
 
-	Set_machw_change_vir_if(WILC_FALSE);
+	Set_machw_change_vir_if(ATL_FALSE);
 
-	g_bWaitForRecovery = 0;	
+	/*TicketId1003*/
+	/*Reset the recovery flag here to allow getting mac address and registering frames*/
+	g_bWaitForRecovery = 0;
 	
-	status = host_int_get_MacAddress(priv->hWILCWFIDrv, mac_add);
+	status = host_int_get_MacAddress(priv->hATWILCWFIDrv, mac_add);
 	PRINT_D(INIT_DBG, "Mac address: %x:%x:%x:%x:%x:%x\n", mac_add[0], mac_add[1], mac_add[2],
 															mac_add[3], mac_add[4], mac_add[5]);
 
 	//loop through the NUM of supported devices and set the MAC address
 	for(i=0;i<g_linux_wlan->u8NoIfcs;i++)
 	{
-		if(ndev == g_linux_wlan->strInterfaceInfo[i].wilc_netdev)
+		if(ndev == g_linux_wlan->strInterfaceInfo[i].atwilc_netdev)
 		{
 			memcpy(g_linux_wlan->strInterfaceInfo[i].aSrcAddress, mac_add, ETH_ALEN);
-			g_linux_wlan->strInterfaceInfo[i].drvHandler = (WILC_Uint32)priv->hWILCWFIDrv;
+			g_linux_wlan->strInterfaceInfo[i].drvHandler = (ATL_Uint32)priv->hATWILCWFIDrv;
 			break;
 		}		
 	}
@@ -2144,31 +2099,18 @@ int mac_open(struct net_device *ndev){
 	}
 
 
-   	WILC_WFI_frame_register(nic->wilc_netdev->ieee80211_ptr->wiphy,nic->wilc_netdev,
+   	ATWILC_WFI_frame_register(nic->atwilc_netdev->ieee80211_ptr->wiphy,nic->atwilc_netdev,
            						nic->g_struct_frame_reg[0].frame_type,nic->g_struct_frame_reg[0].reg);
-      	WILC_WFI_frame_register(nic->wilc_netdev->ieee80211_ptr->wiphy,nic->wilc_netdev,
+      	ATWILC_WFI_frame_register(nic->atwilc_netdev->ieee80211_ptr->wiphy,nic->atwilc_netdev,
            						nic->g_struct_frame_reg[1].frame_type,nic->g_struct_frame_reg[1].reg);
     	netif_wake_queue(ndev); 
  	g_linux_wlan->open_ifcs++;
-	printk("mac_open: g_linux_wlan->open_ifcs=%d\n", g_linux_wlan->open_ifcs);
 	nic->mac_opened=1;
-
-
-#if defined(PLAT_ALLWINNER_A31) || defined(SAMA5D4)
-	/* A31 Opens the 2 interfaces only at the first time, then closes the STA interface only.
-		Then at the next switching ON, it will open the STA interface only.
-		However, mac_close closes both interfaces to deinit and power down the chip.
-		We need to automatically reopen the P2P interface.*/
-	printk("mac_open: check ifcs\n");
-	if((g_linux_wlan->strInterfaceInfo[0].wilc_netdev== ndev) && 
-		((g_linux_wlan->open_ifcs) == 1) && g_linux_wlan->strInterfaceInfo[1].wilc_netdev != NULL)
-		mac_open(g_linux_wlan->strInterfaceInfo[1].wilc_netdev);
-#endif //PLAT_ALLWINNER_A31
     return 0;
 	
 _err_:
-	WILC_WFI_DeInitHostInt(ndev);
-	wilc1000_wlan_deinit(g_linux_wlan, true);
+	ATWILC_WFI_DeInitHostInt(ndev);
+	atwilc_wlan_deinit(g_linux_wlan);
 	return ret;	
 }
 #else
@@ -2179,7 +2121,7 @@ int mac_open(struct net_device *ndev)
 	nic = netdev_priv(ndev);
 
 	/*initialize platform*/
-	if(wilc1000_wlan_init(nic)){
+	if(atwilc_wlan_init(nic)){
 		PRINT_ER("Failed to initialize platform\n");
 		return 1;
 		}
@@ -2201,15 +2143,15 @@ struct net_device_stats *mac_stats(struct net_device *dev)
 
 // Setup the multicast filter
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 34)
-static void wilc_set_multicast_list(struct net_device *dev)
+static void atwilc_set_multicast_list(struct net_device *dev)
 {
 
 	struct netdev_hw_addr *ha;
-	struct WILC_WFI_priv* priv;
-    	tstrWILC_WFIDrv * pstrWFIDrv;
+	struct ATWILC_WFI_priv* priv;
+    	tstrATWILC_WFIDrv * pstrWFIDrv;
 	int i=0;
 	priv= wiphy_priv(dev->ieee80211_ptr->wiphy);
-	pstrWFIDrv = (tstrWILC_WFIDrv *)priv->hWILCWFIDrv;
+	pstrWFIDrv = (tstrATWILC_WFIDrv *)priv->hATWILCWFIDrv;
 
 	if (!dev)
  		return;
@@ -2226,11 +2168,11 @@ static void wilc_set_multicast_list(struct net_device *dev)
 
 	/* If there's more addresses than we handle, get all multicast
 	packets and sort them out in software. */
-	if ( (dev->flags & IFF_ALLMULTI) ||(dev->mc.count) > WILC_MULTICAST_TABLE_SIZE) 
+	if ( (dev->flags & IFF_ALLMULTI) ||(dev->mc.count) > ATWILC_MULTICAST_TABLE_SIZE) 
 	{
 	    	PRINT_D(INIT_DBG,"Disable multicast filter, retrive all multicast packets\n");
 	        // get all multicast packets
-		 host_int_setup_multicast_filter((WILC_WFIDrvHandle)pstrWFIDrv, WILC_FALSE, 0);
+		 host_int_setup_multicast_filter((ATWILC_WFIDrvHandle)pstrWFIDrv, ATL_FALSE, 0);
 	        return;
 	}
 	
@@ -2238,27 +2180,27 @@ static void wilc_set_multicast_list(struct net_device *dev)
     	if ((dev->mc.count) == 0) 
     	{
     		PRINT_D(INIT_DBG,"Enable multicast filter, retrive directed packets only.\n");
-        	host_int_setup_multicast_filter((WILC_WFIDrvHandle)pstrWFIDrv, WILC_TRUE, 0);
+        	host_int_setup_multicast_filter((ATWILC_WFIDrvHandle)pstrWFIDrv, ATL_TRUE, 0);
         	return;
     	}
 	
    	 /* Store all of the multicast addresses in the hardware filter */
     	netdev_for_each_mc_addr(ha, dev) 
     	{
-        	WILC_memcpy(gau8MulticastMacAddrList[i], ha->addr, ETH_ALEN);
+        	ATL_memcpy(gau8MulticastMacAddrList[i], ha->addr, ETH_ALEN);
 		PRINT_D(INIT_DBG,"Entry[%d]: %x:%x:%x:%x:%x:%x\n",i,
 			gau8MulticastMacAddrList[i][0], gau8MulticastMacAddrList[i][1], gau8MulticastMacAddrList[i][2], gau8MulticastMacAddrList[i][3], gau8MulticastMacAddrList[i][4], gau8MulticastMacAddrList[i][5]);
 	 	i++;
     	}
 	
-	host_int_setup_multicast_filter((WILC_WFIDrvHandle)pstrWFIDrv, WILC_TRUE, (dev->mc.count));
+	host_int_setup_multicast_filter((ATWILC_WFIDrvHandle)pstrWFIDrv, ATL_TRUE, (dev->mc.count));
 
 	return;	
 }
 
 #else
 
-static void wilc_set_multicast_list(struct net_device *dev)
+static void atwilc_set_multicast_list(struct net_device *dev)
 {
 	// BIG Warning, Beware : Uncompiled, untested...
     	struct dev_mc_list *mc_ptr;
@@ -2281,10 +2223,10 @@ static void wilc_set_multicast_list(struct net_device *dev)
 	
     /* If there's more addresses than we handle, get all multicast
     packets and sort them out in software. */
-    if ( (dev->flags & IFF_ALLMULTI) ||( dev->mc_count > WILC_MULTICAST_TABLE_SIZE) )
+    if ( (dev->flags & IFF_ALLMULTI) ||( dev->mc_count > ATWILC_MULTICAST_TABLE_SIZE) )
     {
     	 PRINT_D(INIT_DBG,"Disable multicast filter, retrive all multicast packets\n");
-        host_int_setup_multicast_filter((WILC_WFIDrvHandle)gWFiDrvHandle, WILC_FALSE, 0);
+        host_int_setup_multicast_filter((ATWILC_WFIDrvHandle)gWFiDrvHandle, ATL_FALSE, 0);
         return;
     }
 	
@@ -2292,7 +2234,7 @@ static void wilc_set_multicast_list(struct net_device *dev)
     if (dev->mc_count == 0) 
     {
     	 PRINT_D(INIT_DBG,"Enable multicast filter, retrive directed packets only.\n");
-        host_int_setup_multicast_filter((WILC_WFIDrvHandle)gWFiDrvHandle, WILC_TRUE, 0);
+        host_int_setup_multicast_filter((ATWILC_WFIDrvHandle)gWFiDrvHandle, ATL_TRUE, 0);
         return;
     }
 	
@@ -2300,11 +2242,11 @@ static void wilc_set_multicast_list(struct net_device *dev)
 
     for (mc_ptr = dev->mc_list; mc_ptr; mc_ptr = mc_ptr->next , i++)
     {
-        WILC_memcpy(gau8MulticastMacAddrList[i], mc_ptr->dmi_addr, ETH_ALEN)
+        ATL_memcpy(gau8MulticastMacAddrList[i], mc_ptr->dmi_addr, ETH_ALEN)
 	 i++;
     }
         
-    host_int_setup_multicast_filter((WILC_WFIDrvHandle)gWFiDrvHandle, WILC_TRUE, (dev->mc_count));
+    host_int_setup_multicast_filter((ATWILC_WFIDrvHandle)gWFiDrvHandle, ATL_TRUE, (dev->mc_count));
 	
 }
 #endif
@@ -2332,7 +2274,7 @@ int mac_xmit(struct sk_buff *skb, struct net_device *ndev)
 	struct ethhdr * eth_h;
 	nic = netdev_priv(ndev);
 
-	PRINT_D(INT_DBG,"\n========\n IntUH: %d - IntBH: %d - IntCld: %d \n========\n",int_rcvdU,int_rcvdB,int_clrd);
+	PRINT_D(INT_DBG,"\n========\n IntUH: %d - IntBH: %d - IntCld: \n========\n",int_rcvdU,int_rcvdB/*,int_clrd*/);
 	PRINT_D(TX_DBG,"Sending packet just received from TCP/IP\n");
    
 	/* Stop the network interface queue */
@@ -2379,41 +2321,41 @@ int mac_xmit(struct sk_buff *skb, struct net_device *ndev)
 	nic->netstats.tx_packets++;
 	nic->netstats.tx_bytes+=tx_data->size;
 	tx_data->pBssid = g_linux_wlan->strInterfaceInfo[nic->u8IfIdx].aBSSID;
-	#ifndef WILC_FULLY_HOSTING_AP
+	#ifndef ATWILC_FULLY_HOSTING_AP
 	QueueCount = g_linux_wlan->oup.wlan_add_to_tx_que((void*)tx_data,
 									tx_data->buff,
 									tx_data->size,
 									linux_wlan_tx_complete);
 	#else
-	QueueCount = WILC_Xmit_data((void*)tx_data, HOST_TO_WLAN);
-	#endif //WILC_FULLY_HOSTING_AP
+	QueueCount = ATWILC_Xmit_data((void*)tx_data, HOST_TO_WLAN);
+	#endif //ATWILC_FULLY_HOSTING_AP
 
 
 	if(QueueCount > FLOW_CONTROL_UPPER_THRESHOLD)
 	{
-		netif_stop_queue(g_linux_wlan->strInterfaceInfo[0].wilc_netdev);
-		netif_stop_queue(g_linux_wlan->strInterfaceInfo[1].wilc_netdev);
+		netif_stop_queue(g_linux_wlan->strInterfaceInfo[0].atwilc_netdev);
+		netif_stop_queue(g_linux_wlan->strInterfaceInfo[1].atwilc_netdev);
 	}
 	
     	return 0;
 }
 
-static int exit_func(void* data);
+
 int mac_close(struct net_device *ndev)
 {
-	struct WILC_WFI_priv* priv;
+	struct ATWILC_WFI_priv* priv;
 	perInterface_wlan_t* nic;
-	tstrWILC_WFIDrv * pstrWFIDrv;
+	tstrATWILC_WFIDrv * pstrWFIDrv;
 	
 	nic = netdev_priv(ndev);
 
-	if( (nic == NULL) || (nic->wilc_netdev == NULL) || (nic->wilc_netdev->ieee80211_ptr == NULL) || (nic->wilc_netdev->ieee80211_ptr->wiphy == NULL) )
+	if( (nic == NULL) || (nic->atwilc_netdev == NULL) || (nic->atwilc_netdev->ieee80211_ptr == NULL) || (nic->atwilc_netdev->ieee80211_ptr->wiphy == NULL) )
     	{
     		PRINT_ER("nic = NULL\n");
     		return 0;
     	}
 
-	priv = wiphy_priv(nic->wilc_netdev->ieee80211_ptr->wiphy);
+	priv = wiphy_priv(nic->atwilc_netdev->ieee80211_ptr->wiphy);
 
 	if(priv == NULL)
     	{
@@ -2421,7 +2363,7 @@ int mac_close(struct net_device *ndev)
     		return 0;
     	}
 		
-	pstrWFIDrv = (tstrWILC_WFIDrv *)priv->hWILCWFIDrv;
+	pstrWFIDrv = (tstrATWILC_WFIDrv *)priv->hATWILCWFIDrv;
 	PRINT_D(GENERIC_DBG,"Mac close\n");
 
 	if(g_linux_wlan == NULL)
@@ -2436,79 +2378,71 @@ int mac_close(struct net_device *ndev)
     		return 0;
     	}
 		
-	if((g_linux_wlan->open_ifcs)>0){
+	if((g_linux_wlan->open_ifcs)>0)
  		g_linux_wlan->open_ifcs--;	
-		printk("mac_close: g_linux_wlan->open_ifcs=%d\n", g_linux_wlan->open_ifcs);
-	}
 	else
 	{
 		printk("ERROR: MAC close called while number of opened interfaces is zero\n");
 		return 0;
 	}
 	
-	if(nic->wilc_netdev != NULL)
+	if(nic->atwilc_netdev != NULL)
 	{
 		// Stop the network interface queue 
-		netif_stop_queue(nic->wilc_netdev);
+		netif_stop_queue(nic->atwilc_netdev);
 			
 		#ifdef USE_WIRELESS
-	if(!gbCrashRecover)
-		WILC_WFI_DeInitHostInt(nic->wilc_netdev);
+		/*TicketId1003*/
+		/*If recovering from a crash, don't de-init host interface*/
+		if(!gbCrashRecover)
+			ATWILC_WFI_DeInitHostInt(nic->atwilc_netdev);
 		#endif
 	}
 
-	nic->mac_opened=0;
 	if(g_linux_wlan->open_ifcs==0)
 	{	
-		PRINT_D(GENERIC_DBG,"Deinitializing wilc1000\n");
+		PRINT_D(GENERIC_DBG,"Deinitializing atwilc\n");
 		g_linux_wlan->close = 1;
-		wilc1000_wlan_deinit(g_linux_wlan, 1);
+		atwilc_wlan_deinit(g_linux_wlan);
 		#ifdef USE_WIRELESS
-		#ifdef WILC_AP_EXTERNAL_MLME
-	 	WILC_WFI_deinit_mon_interface();
+		#ifdef ATWILC_AP_EXTERNAL_MLME
+	 	ATWILC_WFI_deinit_mon_interface();
 		#endif
 		#endif
 	}
-	else
-	{
-	#if defined(PLAT_ALLWINNER_A31) || defined(SAMA5D4)
-		/* A31 don't call mac_close for the p2p interface.
-			when the module was removed, all interfaces were mac_closed.
-			Have to simulate that
-		*/
-		printk("mac_close: call exit_func\n");
-		exit_func(g_linux_wlan);
-	#endif
-	}
-	
+
+	linux_wlan_unlock(&close_exit_sync);	
+	nic->mac_opened=0;
+
 	return 0;
 }
 
 
 int mac_ioctl(struct net_device *ndev, struct ifreq *req, int cmd){
 	
-	WILC_Uint8 *buff= NULL;
-	WILC_Sint8 rssi;
-	WILC_Uint32 size=0;
+	ATL_Uint8 *buff= NULL;
+	ATL_Sint8 rssi;
+	ATL_Uint32 size=0;
 	perInterface_wlan_t* nic;
-	struct WILC_WFI_priv* priv;
-	WILC_Sint32 s32Error = WILC_SUCCESS;
+	struct ATWILC_WFI_priv* priv;
+	ATL_Sint32 s32Error = ATL_SUCCESS;
 
 
 	
 	//struct iwreq *wrq = (struct iwreq *) req;	// tony moved to case SIOCSIWPRIV
 	#ifdef USE_WIRELESS
 	nic = netdev_priv(ndev);
-	priv = wiphy_priv(nic->wilc_netdev->ieee80211_ptr->wiphy);
+	priv = wiphy_priv(nic->atwilc_netdev->ieee80211_ptr->wiphy);
 
 
-	if(!g_linux_wlan->wilc1000_initialized)
+	if(!g_linux_wlan->atwilc_initialized)
 		return 0;
 
 	#endif
 
 
 	switch(cmd){
+#if defined(PLAT_ALLWINNER_A20) || defined(PLAT_ALLWINNER_A23) || defined(PLAT_ALLWINNER_A31)
 	// [[ added by tony for SIOCDEVPRIVATE
 	case SIOCDEVPRIVATE+1:
 		{
@@ -2568,6 +2502,40 @@ int mac_ioctl(struct net_device *ndev, struct ifreq *req, int cmd){
 			}
 		}break;
 	// ]] 2013-06-24
+	#else
+	case SIOCDEVPRIVATE+1:
+		{
+			android_wifi_priv_cmd priv_cmd;
+
+			if (copy_from_user(&priv_cmd, req->ifr_data, sizeof(android_wifi_priv_cmd))) {
+				s32Error = -EFAULT;
+				goto done;
+			}
+			
+			buff = kmalloc(priv_cmd.total_len, GFP_KERNEL);
+			if (!buff)
+			{
+				s32Error = -ENOMEM;
+				goto done;
+			}
+
+			if (copy_from_user(buff, priv_cmd.buf, priv_cmd.total_len)) {
+				s32Error = -EFAULT;
+				goto done;
+			}
+
+			if(strnicmp(buff, "BTCOEXMODE", strlen("BTCOEXMODE")) == 0) {						
+				uint32_t mode = *(buff + strlen("BTCOEXMODE") + 1) - '0';
+		        #ifdef ATWILC_BT_COEXISTENCE
+				PRINT_D(GENERIC_DBG, "[COEX] [DRV] rcvd IO ctrl << BT-MODE: %d >>\n",mode);
+				{
+					host_int_change_bt_coex_mode(priv->hATWILCWFIDrv,mode);
+				}
+				#endif			        		
+        	}
+		}
+		break;
+#endif
 	case SIOCSIWPRIV:
 		{
 			struct iwreq *wrq = (struct iwreq *) req;	// added by tony
@@ -2595,22 +2563,22 @@ int mac_ioctl(struct net_device *ndev, struct ifreq *req, int cmd){
 
 				if(strnicmp(buff,"RSSI",size) == 0) 
 				{
-				#ifdef WILC1000_BT_COEXISTENCE
+				#ifdef ATWILC_BT_COEXISTENCE
 					//AA need another way to get bluetooth state (on/off)
 					#if 0
-					//WILC_Bool bt_State = gpio_get_value(sprd_3rdparty_gpio_beken_bt_ldo_en);
+					//ATL_Bool bt_State = gpio_get_value(sprd_3rdparty_gpio_beken_bt_ldo_en);
 					//if( bt_State != u8Bluetooth_state)
 					{
 						u8Bluetooth_state = bt_State;
 						printk("[COEX] [DRV] setting coexistance mode to %d\n",u8Bluetooth_state);
-						host_int_change_bt_coex_mode((WILC_WFIDrvHandle)gWFiDrvHandle,u8Bluetooth_state);
+						host_int_change_bt_coex_mode((ATWILC_WFIDrvHandle)gWFiDrvHandle,u8Bluetooth_state);
 					}
 					#endif
 					//AA end
 				#endif
 
 					#ifdef USE_WIRELESS
-					s32Error = host_int_get_rssi(priv->hWILCWFIDrv, &(rssi));
+					s32Error = host_int_get_rssi(priv->hATWILCWFIDrv, &(rssi));
 					if(s32Error)
 						PRINT_ER("Failed to send get rssi param's message queue ");
 					#endif
@@ -2628,19 +2596,19 @@ int mac_ioctl(struct net_device *ndev, struct ifreq *req, int cmd){
 					}
 			        }else if(strnicmp(buff, "BTCOEXMODE", strlen("BTCOEXMODE")) == 0) {						
 						uint32_t mode = *(buff + strlen("BTCOEXMODE") + 1) - '0';
-				    #ifdef WILC1000_BT_COEXISTENCE
+				    #ifdef ATWILC_BT_COEXISTENCE
 						printk("[COEX] [DRV] rcvd IO ctrl << BT-MODE: %d >>\n",mode);
 						if(mode != 1 && mode != 0)
 						{
-							host_int_change_bt_coex_mode(priv->hWILCWFIDrv,mode);
+							host_int_change_bt_coex_mode(priv->hATWILCWFIDrv,mode);
 						}
 					#endif			        		
 			        }else if(strnicmp(buff, "BTCOEXSCAN-START", strlen("BTCOEXSCAN-START")) == 0) {						
-						#ifdef WILC1000_BT_COEXISTENCE
+						#ifdef ATWILC_BT_COEXISTENCE
 						printk("[COEX] [DRV] rcvd IO ctrl << BTCOEXSCAN-START >>\n");
 						#endif
 			        }else if(strnicmp(buff, "BTCOEXSCAN-STOP", strlen("BTCOEXSCAN-STOP")) == 0) {						
-						#ifdef WILC1000_BT_COEXISTENCE
+						#ifdef ATWILC_BT_COEXISTENCE
 						printk("[COEX] [DRV] rcvd IO ctrl << BTCOEXSCAN-STOP >>\n");
 						#endif
 			        }
@@ -2675,21 +2643,51 @@ void frmw_to_linux(uint8_t *buff, uint32_t size,uint32_t pkt_offset){
 	char*pu8UdpBuffer;
     struct iphdr *ih;
 #endif
-	struct net_device* wilc_netdev;
+	struct net_device* atwilc_netdev;
 	perInterface_wlan_t *nic;
+	struct ATWILC_WFI_priv *priv;
+	unsigned char null_bssid[ETH_ALEN] = {0};
 
-	wilc_netdev = GetIfHandler(buff);
-	if(wilc_netdev == NULL)
+	atwilc_netdev = GetIfHandler(buff);
+	if(atwilc_netdev == NULL)
 		return;
 	
 	buff += pkt_offset;
-   	nic = netdev_priv(wilc_netdev);
+   	nic = netdev_priv(atwilc_netdev);
 
 		if(size > 0){
 
 			frame_len = size;
 			buff_to_send = buff;
-			
+
+			/*TicketId1001*/
+			/*If eapol frame and successful connection is not yet reported, */
+			/*buffer it to be passed later.*/
+			priv = wdev_priv(atwilc_netdev->ieee80211_ptr);
+			if((buff_to_send[12]==0x88 && buff_to_send[13]==0x8e)
+				&& (!(memcmp(priv->au8AssociatedBss, null_bssid, ETH_ALEN))))
+			{
+				/*Allocate memory*/
+				if(priv->pStrBufferedEAP == NULL)
+				{
+					priv->pStrBufferedEAP = (struct atwilc_buffered_eap*)ATL_MALLOC(sizeof(struct atwilc_buffered_eap));
+					priv->pStrBufferedEAP->pu8buff = NULL;
+				}
+				if(priv->pStrBufferedEAP->pu8buff)
+				{
+					ATL_FREE(priv->pStrBufferedEAP->pu8buff);
+				}
+				priv->pStrBufferedEAP->pu8buff = (unsigned char*)ATL_MALLOC(size + pkt_offset);
+				
+				priv->pStrBufferedEAP->u32Size = size;
+				priv->pStrBufferedEAP->u32PktOffset = pkt_offset;
+				ATL_memcpy(priv->pStrBufferedEAP->pu8buff, buff -pkt_offset, size + pkt_offset);
+
+				/*TO DO: Stop timer before starting it*/
+				/*Wait about 10 ms then check again if successful connection is reported*/
+				ATL_TimerStart(&hEAPFrameBuffTimer, 10, priv, ATL_NULL);
+				return;
+			}
 			
 			/* Need to send the packet up to the host, allocate a skb buffer */
 		    	skb = dev_alloc_skb(frame_len);
@@ -2700,10 +2698,10 @@ void frmw_to_linux(uint8_t *buff, uint32_t size,uint32_t pkt_offset){
 
 			skb_reserve(skb, (unsigned int)skb->data & 0x3);
 
-			if(g_linux_wlan == NULL || wilc_netdev == NULL){
-			    PRINT_ER("wilc_netdev in g_linux_wlan is NULL");
+			if(g_linux_wlan == NULL || atwilc_netdev == NULL){
+			    PRINT_ER("atwilc_netdev in g_linux_wlan is NULL");
 			}
-			skb->dev = wilc_netdev;
+			skb->dev = atwilc_netdev;
 	
 			if(skb->dev == NULL){
 				PRINT_ER("skb->dev is NULL\n");
@@ -2713,35 +2711,35 @@ void frmw_to_linux(uint8_t *buff, uint32_t size,uint32_t pkt_offset){
 			for(i=0;i<40;i++)
 			{
 				if(i<frame_len)
-					WILC_PRINTF("buff_to_send[%d]=%2x\n",i,buff_to_send[i]);
+					ATL_PRINTF("buff_to_send[%d]=%2x\n",i,buff_to_send[i]);
 
 			}*/
 
 			//skb_put(skb, frame_len);
 			memcpy(skb_put(skb, frame_len),buff_to_send, frame_len);
 
-			//WILC_PRINTF("After MEM_CPY\n");
+			//ATL_PRINTF("After MEM_CPY\n");
 
-			//nic = netdev_priv(wilc_netdev);
+			//nic = netdev_priv(atwilc_netdev);
 			
 #ifdef USE_WIRELESS
 		/*	if(nic->monitor_flag)
 			{
-				WILC_WFI_monitor_rx(nic->wilc_netdev,skb);
+				ATWILC_WFI_monitor_rx(nic->atwilc_netdev,skb);
 				return;
 			}*/
 #endif
-		    skb->protocol = eth_type_trans(skb, wilc_netdev);
+		    skb->protocol = eth_type_trans(skb, atwilc_netdev);
 		#ifndef TCP_ENHANCEMENTS
 		    /*get source and dest ip addresses*/
 			ih = (struct iphdr *)(skb->data+sizeof(struct ethhdr));
 			//saddr = &ih->saddr;
 			//daddr = &ih->daddr;
-			//WILC_PRINTF("[REC]Source IP = %.2x:%.2x:%.2x:%.2x",saddr[0],saddr[1],
+			//ATL_PRINTF("[REC]Source IP = %.2x:%.2x:%.2x:%.2x",saddr[0],saddr[1],
 					//saddr[2],saddr[3]);
-			//WILC_PRINTF("[REC]Dest IP = %.2x:%.2x:%.2x:%.2x",daddr[0],daddr[1],
+			//ATL_PRINTF("[REC]Dest IP = %.2x:%.2x:%.2x:%.2x",daddr[0],daddr[1],
 				//		daddr[2],daddr[3]);
-			//WILC_PRINTF("Protocol = %4x\n",skb->protocol);
+			//ATL_PRINTF("Protocol = %4x\n",skb->protocol);
 			pu8UdpBuffer = (char*)ih + sizeof(struct iphdr);
 			//printk("Port No = %d,%d\n",pu8UdpBuffer[1],pu8UdpBuffer[3]);
 			if(buff_to_send[35] == 67 && buff_to_send[37] == 68)
@@ -2767,7 +2765,7 @@ void frmw_to_linux(uint8_t *buff, uint32_t size,uint32_t pkt_offset){
 }
 
 
-void WILC_WFI_mgmt_rx(uint8_t *buff, uint32_t size)
+void ATWILC_WFI_mgmt_rx(uint8_t *buff, uint32_t size)
 {
 	int i = 0;
 	perInterface_wlan_t* nic;
@@ -2777,25 +2775,25 @@ void WILC_WFI_mgmt_rx(uint8_t *buff, uint32_t size)
 	/*Otherwise, pass it on p2p0 netdev, if registered on it*/
 	for(i = 0;i< g_linux_wlan->u8NoIfcs;i++)
 	{
-		nic = netdev_priv(g_linux_wlan->strInterfaceInfo[i].wilc_netdev);
+		nic = netdev_priv(g_linux_wlan->strInterfaceInfo[i].atwilc_netdev);
 		if(nic->monitor_flag)
 		{
-			WILC_WFI_monitor_rx(buff,size);
+			ATWILC_WFI_monitor_rx(buff,size);
 			return;
 		}
 	}
 
-	#ifdef WILC_P2P
-	nic = netdev_priv(g_linux_wlan->strInterfaceInfo[1].wilc_netdev); //p2p0
+	#ifdef ATWILC_P2P
+	nic = netdev_priv(g_linux_wlan->strInterfaceInfo[1].atwilc_netdev); //p2p0
 	if( (buff[0]== nic->g_struct_frame_reg[0].frame_type && nic->g_struct_frame_reg[0].reg) ||
 	   (buff[0]== nic->g_struct_frame_reg[1].frame_type && nic->g_struct_frame_reg[1].reg) )
 	{
-		WILC_WFI_p2p_rx(g_linux_wlan->strInterfaceInfo[1].wilc_netdev,buff,size);
+		ATWILC_WFI_p2p_rx(g_linux_wlan->strInterfaceInfo[1].atwilc_netdev,buff,size);
 	}
 	#endif
 }
 
-int wilc_netdev_init(void){
+int atwilc_netdev_init(void){
 
 	int i;
 	perInterface_wlan_t* nic;
@@ -2804,13 +2802,12 @@ int wilc_netdev_init(void){
 	linux_wlan_init_lock("close_exit_sync",&close_exit_sync,0);
 
 	/*create the common structure*/
-	g_linux_wlan=(linux_wlan_t*)WILC_MALLOC(sizeof(linux_wlan_t));
+	g_linux_wlan=(linux_wlan_t*)ATL_MALLOC(sizeof(linux_wlan_t));
 	memset(g_linux_wlan,0,sizeof(linux_wlan_t));
 	
 	/*Reset interrupt count debug*/
 	int_rcvdU= 0;
 	int_rcvdB= 0;
-	int_clrd = 0;
 	#ifdef DISABLE_PWRSAVE_AND_SCAN_DURING_IP
 	register_inetaddr_notifier(&g_dev_notifier);
 	#endif
@@ -2835,26 +2832,26 @@ int wilc_netdev_init(void){
 			strcpy(ndev->name,"p2p%d");
 
 		nic->u8IfIdx = g_linux_wlan->u8NoIfcs;
-		nic->wilc_netdev = ndev;
-		g_linux_wlan->strInterfaceInfo[g_linux_wlan->u8NoIfcs].wilc_netdev = ndev;
+		nic->atwilc_netdev = ndev;
+		g_linux_wlan->strInterfaceInfo[g_linux_wlan->u8NoIfcs].atwilc_netdev = ndev;
 		g_linux_wlan->u8NoIfcs++;
-		wilc_set_netdev_ops(ndev);	
+		atwilc_set_netdev_ops(ndev);	
 	
 		#ifdef USE_WIRELESS
 		{
 			struct wireless_dev *wdev;
 			/*Register WiFi*/
-			wdev = WILC_WFI_WiphyRegister(ndev);
+			wdev = ATWILC_WFI_WiphyRegister(ndev);
 
 			if(wdev == NULL){
-			PRINT_ER("Can't register WILC Wiphy\n");
+			PRINT_ER("Can't register ATWILC Wiphy\n");
 			return -1;
 			}
 	
 			/*linking the wireless_dev structure with the netdevice*/
-			nic->wilc_netdev->ieee80211_ptr = wdev;
-			nic->wilc_netdev->ml_priv = nic;
-			wdev->netdev = nic->wilc_netdev;
+			nic->atwilc_netdev->ieee80211_ptr = wdev;
+			nic->atwilc_netdev->ml_priv = nic;
+			wdev->netdev = nic->atwilc_netdev;
 			nic->netstats.rx_packets=0;
 			nic->netstats.tx_packets=0;
 			nic->netstats.rx_bytes=0;
@@ -2872,23 +2869,29 @@ int wilc_netdev_init(void){
 		nic->iftype = STATION_MODE;
 		nic->mac_opened=0;
 	
-		}	
+		}
+	
+	#ifndef ATWILC_SDIO
+	g_linux_wlan->atwilc_spidev = atwilc_spi_dev;
+	#else
+	g_linux_wlan->atwilc_sdio_func= local_sdio_func;
+	#endif
 	
 	return 0;
 }
 
 
 /*The 1st function called after module inserted*/
-static int __init init_wilc_driver(void){
-
+static int __init init_atwilc_driver(void){
+	int ret = 0;
 	if(at_pwr_dev_init() != 0)
 	{
-		WILC_PRINTF("Failed to create bluetooth power device\n");
+		ATL_PRINTF("Failed to create bluetooth power device\n");
 	}
-	
-#if defined (WILC_DEBUGFS)
-	if(wilc_debugfs_init() < 0) {	
-		WILC_PRINTF("fail to create debugfs for wilc driver\n");
+
+#if defined (ATWILC_DEBUGFS)
+	if(atwilc_debugfs_init() < 0) {	
+		ATL_PRINTF("fail to create debugfs for atwilc driver\n");
 		return -1;
 	}
 #endif
@@ -2896,63 +2899,30 @@ static int __init init_wilc_driver(void){
 	/* driver version in Makefile */
 	printk("*** WILC3000 driver VERSION=[%s], fw VERSION=[%s] ***\n", __DRIVER_VERSION__, __FW_VERSION__);
 
+	at_pwr_power_up(PWR_DEV_SRC_WIFI);
+	ret = at_pwr_register_bus(PWR_DEV_SRC_WIFI);
+		
+	if(ret < 0)
+		return ret;
+
 	PRINT_D(INIT_DBG,"Initializing netdev\n");
-	if(wilc_netdev_init()){
+	if(atwilc_netdev_init()){
 		PRINT_ER("Couldn't initialize netdev\n");
 	}
 
 	PRINT_D(INIT_DBG,"Device has been initialized successfully\n");
     	return 0;
 }
-module_init(init_wilc_driver);
+module_init(init_atwilc_driver);
 
-#define CLOSE_TIMEOUT 12*1000
-static int exit_func(void* data)
+static void __exit exit_atwilc_driver(void)
 {
 	int i = 0;
 	perInterface_wlan_t* nic[NUM_CONCURRENT_IFC];
+	#define CLOSE_TIMEOUT 3*1000
 
-	for(i=0;i<NUM_CONCURRENT_IFC;i++)
-	{
-		nic[i]=netdev_priv(g_linux_wlan->strInterfaceInfo[i].wilc_netdev);
-	}
-	
-	if((g_linux_wlan != NULL) &&g_linux_wlan->wilc_firmware != NULL)
-		{
-			release_firmware(g_linux_wlan->wilc_firmware);
-			g_linux_wlan->wilc_firmware = NULL;
-		}
-	
-	
-	if( (g_linux_wlan != NULL)  &&( ((g_linux_wlan->strInterfaceInfo[0].wilc_netdev) != NULL)
-		|| ((g_linux_wlan->strInterfaceInfo[1].wilc_netdev) != NULL)))
-	
-	{
-		PRINT_D(INIT_DBG,"Waiting for mac_close ....\n");
-		
-		for(i=0;i<NUM_CONCURRENT_IFC;i++)
-		{	
-			//close all opened interfaces
-			if(g_linux_wlan->strInterfaceInfo[i].wilc_netdev != NULL)
-			{	
-				if(nic[i]->mac_opened)
-
-				{	
-					mac_close(g_linux_wlan->strInterfaceInfo[i].wilc_netdev);
-				}
-			}
-		}
-	}
-	return 0;
-}
-
-static void __exit exit_wilc_driver(void)
-{
-	int i = 0;
-	perInterface_wlan_t* nic[NUM_CONCURRENT_IFC];
-
-	if( (g_linux_wlan != NULL)  &&( ((g_linux_wlan->strInterfaceInfo[0].wilc_netdev) != NULL)
-		|| ((g_linux_wlan->strInterfaceInfo[1].wilc_netdev) != NULL)))
+	if( (g_linux_wlan != NULL)  &&( ((g_linux_wlan->strInterfaceInfo[0].atwilc_netdev) != NULL)
+		|| ((g_linux_wlan->strInterfaceInfo[1].atwilc_netdev) != NULL)))
 	{
 	#ifdef DISABLE_PWRSAVE_AND_SCAN_DURING_IP
 	unregister_inetaddr_notifier(&g_dev_notifier);
@@ -2960,57 +2930,83 @@ static void __exit exit_wilc_driver(void)
 
 	for(i=0;i<NUM_CONCURRENT_IFC;i++)
 		{
-			nic[i]=netdev_priv(g_linux_wlan->strInterfaceInfo[i].wilc_netdev);
+			nic[i]=netdev_priv(g_linux_wlan->strInterfaceInfo[i].atwilc_netdev);
 		}
 	}
 	
 	
+	if((g_linux_wlan != NULL) &&g_linux_wlan->atwilc_firmware != NULL)
+		{
+			release_firmware(g_linux_wlan->atwilc_firmware);
+			g_linux_wlan->atwilc_firmware = NULL;
+		}
 	
-	if( (g_linux_wlan != NULL)  &&( ((g_linux_wlan->strInterfaceInfo[0].wilc_netdev) != NULL)
-		|| ((g_linux_wlan->strInterfaceInfo[1].wilc_netdev) != NULL)))
+	
+	if( (g_linux_wlan != NULL)  &&( ((g_linux_wlan->strInterfaceInfo[0].atwilc_netdev) != NULL)
+		|| ((g_linux_wlan->strInterfaceInfo[1].atwilc_netdev) != NULL)))
 	
 	{
-		exit_func(NULL);
+		PRINT_D(INIT_DBG,"Waiting for mac_close ....\n");
+
+		if(linux_wlan_lock_timeout(&close_exit_sync, CLOSE_TIMEOUT) < 0)
+			PRINT_D(INIT_DBG,"Closed TimedOUT\n");
+		else
+			PRINT_D(INIT_DBG,"mac_closed\n");	
+
 		
 		for(i=0;i<NUM_CONCURRENT_IFC;i++)
+		{	
+			//close all opened interfaces
+			if(g_linux_wlan->strInterfaceInfo[i].atwilc_netdev != NULL)
+			{	
+				if(nic[i]->mac_opened)
+
+				{	
+					mac_close(g_linux_wlan->strInterfaceInfo[i].atwilc_netdev);
+				}
+			}
+		}
+		for(i=0;i<NUM_CONCURRENT_IFC;i++)
 		{					
-			PRINT_D(INIT_DBG,"Unregistering netdev %p \n",g_linux_wlan->strInterfaceInfo[i].wilc_netdev);
-			unregister_netdev(g_linux_wlan->strInterfaceInfo[i].wilc_netdev);
+			PRINT_D(INIT_DBG,"Unregistering netdev %p \n",g_linux_wlan->strInterfaceInfo[i].atwilc_netdev);
+			unregister_netdev(g_linux_wlan->strInterfaceInfo[i].atwilc_netdev);
 			#ifdef USE_WIRELESS
 			PRINT_D(INIT_DBG,"Freeing Wiphy...\n");
-			WILC_WFI_WiphyFree(g_linux_wlan->strInterfaceInfo[i].wilc_netdev);
+			ATWILC_WFI_WiphyFree(g_linux_wlan->strInterfaceInfo[i].atwilc_netdev);
 			#endif
 			PRINT_D(INIT_DBG,"Freeing netdev...\n");
-			free_netdev(g_linux_wlan->strInterfaceInfo[i].wilc_netdev);
+			free_netdev(g_linux_wlan->strInterfaceInfo[i].atwilc_netdev);
 		}
 	}
 
 
 #ifdef USE_WIRELESS
-#ifdef WILC_AP_EXTERNAL_MLME
-	// Bug 4600 : WILC_WFI_deinit_mon_interface was already called at mac_close
-	//WILC_WFI_deinit_mon_interface();
+#ifdef ATWILC_AP_EXTERNAL_MLME
+	// Bug 4600 : ATWILC_WFI_deinit_mon_interface was already called at mac_close
+	//ATWILC_WFI_deinit_mon_interface();
 #endif
 #endif
 
 	//if(g_linux_wlan->open_ifcs==0)
-	
+	at_pwr_unregister_bus(PWR_DEV_SRC_WIFI);
+
 	linux_wlan_deinit_lock(&close_exit_sync);
-	
+
 	if(g_linux_wlan != NULL)
 	{
-		WILC_FREE(g_linux_wlan);
+		ATL_FREE(g_linux_wlan);
 		g_linux_wlan = NULL;
 	}
 		PRINT_D(INIT_DBG,"Module_exit Done.\n");	
 		
-	#if defined (WILC_DEBUGFS)
-		wilc_debugfs_remove();
+	#if defined (ATWILC_DEBUGFS)
+		atwilc_debugfs_remove();
 	#endif
-
 	at_pwr_dev_deinit();
+	at_pwr_power_down(PWR_DEV_SRC_WIFI);
+
 }
-module_exit(exit_wilc_driver);
+module_exit(exit_atwilc_driver);
 
 MODULE_LICENSE("GPL");
 #endif

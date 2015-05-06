@@ -1,23 +1,23 @@
 
-#include "wilc_oswrapper.h"
+#include "atl_os_wrapper.h"
 
 
 #define tHANDLE	void *
 
 typedef struct
 {
-	WILC_Uint8		*pu8Buffer;
-	WILC_Uint32	u32BufferLength;
-	WILC_Uint32	u32WriteOffset;
-	WILC_Uint32	u32ReadOffset;
-	WILC_Uint32	u32TotalBytes;	
-	WILC_SemaphoreHandle	SemBuffer;
+	ATL_Uint8		*pu8Buffer;
+	ATL_Uint32	u32BufferLength;
+	ATL_Uint32	u32WriteOffset;
+	ATL_Uint32	u32ReadOffset;
+	ATL_Uint32	u32TotalBytes;	
+	ATL_SemaphoreHandle	SemBuffer;
 }tstrFifoHandler;
 
 
-extern WILC_Uint32 FIFO_InitBuffer(tHANDLE * hBuffer,WILC_Uint32 u32BufferLength);
-extern WILC_Uint32 FIFO_DeInit(tHANDLE hFifo);
-extern WILC_Uint32 FIFO_ReadBytes(tHANDLE hFifo,WILC_Uint8 *pu8Buffer,WILC_Uint32 u32BytesToRead,
-								 WILC_Uint32 *pu32BytesRead);
-extern WILC_Uint32 FIFO_WriteBytes(tHANDLE hFifo,WILC_Uint8 *pu8Buffer,WILC_Uint32 u32BytesToWrite,
-								  WILC_Bool bForceOverWrite);
+extern ATL_Uint32 FIFO_InitBuffer(tHANDLE * hBuffer,ATL_Uint32 u32BufferLength);
+extern ATL_Uint32 FIFO_DeInit(tHANDLE hFifo);
+extern ATL_Uint32 FIFO_ReadBytes(tHANDLE hFifo,ATL_Uint8 *pu8Buffer,ATL_Uint32 u32BytesToRead,
+								 ATL_Uint32 *pu32BytesRead);
+extern ATL_Uint32 FIFO_WriteBytes(tHANDLE hFifo,ATL_Uint8 *pu8Buffer,ATL_Uint32 u32BytesToWrite,
+								  ATL_Bool bForceOverWrite);

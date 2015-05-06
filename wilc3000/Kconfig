@@ -62,4 +62,3 @@ config WILC3000_ENABLE_DEBUGFS
 	default n
 	---help---
 	   Export status information via debugfs.
-

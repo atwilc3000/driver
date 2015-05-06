@@ -2,8 +2,8 @@
 #define LINUX_WLAN_SPI_H
 
 #include <linux/spi/spi.h>
-extern struct spi_device* wilc_spi_dev;
-extern struct spi_driver wilc_bus;
+extern struct spi_device* atwilc_spi_dev;
+extern struct spi_driver atwilc_bus;
 
 int linux_spi_init(void* vp);
 void linux_spi_deinit(void* vp);

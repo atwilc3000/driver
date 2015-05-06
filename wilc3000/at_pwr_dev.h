@@ -14,7 +14,138 @@
 #define PWR_DEV_SRC_MAX 2
 
 #include <linux/mutex.h>
-#include "wilc_wlan_if.h"
+#include "atl_os_wrapper.h"
+//#ifdef ATWILC_SDIO
+#include "linux_wlan_sdio.h"
+//#endif //ATWILC_SDIO
+//#include "atwilc_wlan_if.h"
+
+
+#define HIF_SDIO           (0)
+#define HIF_SPI            (1 << 0)
+#define HIF_SDIO_GPIO_IRQ  (1 << 2)
+
+#define N_INIT		0x00000001
+#define N_ERR		0x00000002
+#define N_TXQ		0x00000004
+#define N_INTR 		0x00000008
+#define N_RXQ		0x00000010
+
+typedef enum {
+	ACQUIRE_ONLY				 = 0,
+	ACQUIRE_AND_WAKEUP     	= 1,
+} BUS_ACQUIRE_T;
+
+typedef enum {
+	RELEASE_ONLY				= 0,
+	RELEASE_ALLOW_SLEEP		= 1,
+} BUS_RELEASE_T;
+
+typedef enum {
+	CHIP_WAKEDUP     		= 0,
+	CHIP_SLEEPING_AUTO      = 1,
+	CHIP_SLEEPING_MANUAL  = 2
+} CHIP_PS_STATE_T;
+
+typedef struct {
+	void *os_private;
+
+	void *hif_critical_section;
+
+	uint32_t tx_buffer_size;
+	void *txq_critical_section;
+	
+	/*Added by Amr - BugID_4720*/
+	void *txq_add_to_head_critical_section;
+	void *txq_spin_lock;
+	
+	void *txq_wait_event;
+#ifdef MEMORY_STATIC
+	uint32_t rx_buffer_size;
+#endif
+	void *rxq_critical_section;
+	void *rxq_wait_event;
+
+	void *cfg_wait_event;
+} atwilc_wlan_os_context_t;
+
+typedef struct {
+	void (*os_sleep)(uint32_t);
+	void (*os_atomic_sleep)(uint32_t);
+	void (*os_debug)(uint8_t *);
+	void *(*os_malloc)(uint32_t);
+	void *(*os_malloc_atomic)(uint32_t);
+	void (*os_free)(void *);
+	void (*os_lock)(void *);
+	void (*os_unlock)(void *);
+	int (*os_wait)(void *,ATL_Uint32);
+	void (*os_signal)(void *);
+	void (*os_enter_cs)(void *);
+	void (*os_leave_cs)(void *);
+
+	/*Added by Amr - BugID_4720*/
+	void (*os_spin_lock)(void *, unsigned long *);
+	void (*os_spin_unlock)(void *, unsigned long *);
+	
+} atwilc_wlan_os_func_t;
+
+typedef struct {
+	int io_type;
+	int (*io_init)(void *);
+	void (*io_deinit)(void *);
+	union {
+		struct {
+			int (*sdio_cmd52)(sdio_cmd52_t *);
+			int (*sdio_cmd53)(sdio_cmd53_t *);
+			int (*sdio_set_max_speed)(void);
+			int (*sdio_set_default_speed)(void);
+		} sdio;
+		struct {
+			int (*spi_max_speed)(void);
+			int (*spi_tx)(uint8_t *, uint32_t);
+			int (*spi_rx)(uint8_t *, uint32_t);
+			int (*spi_trx)(uint8_t *, uint8_t *, uint32_t);
+		} spi;
+	} u;
+} atwilc_wlan_io_func_t;
+
+typedef struct {
+	void (*rx_indicate)(uint8_t *, uint32_t,uint32_t);
+	void (*rx_complete)(void);
+} atwilc_wlan_net_func_t;
+
+typedef struct {
+	void (*mac_indicate)(int);
+} atwilc_wlan_indicate_func_t;
+
+typedef struct {
+	atwilc_wlan_os_context_t os_context;
+	atwilc_wlan_os_func_t os_func;
+	atwilc_wlan_io_func_t io_func;
+	atwilc_wlan_net_func_t net_func;
+	atwilc_wlan_indicate_func_t indicate_func;
+} atwilc_wlan_inp_t;
+
+typedef void (*atwilc_debug_func)(uint32_t, char *, ...);
+
+typedef struct {
+	int (*hif_init)(atwilc_wlan_inp_t *, atwilc_debug_func);
+	int (*hif_deinit)(void *);
+	int (*hif_read_reg)(uint32_t, uint32_t *);
+	int (*hif_write_reg)(uint32_t, uint32_t);
+	int (*hif_block_rx)(uint32_t, uint8_t *, uint32_t);
+	int (*hif_block_tx)(uint32_t, uint8_t *, uint32_t);	
+	int (*hif_sync)(void);
+	int (*hif_clear_int)(void);	
+	int (*hif_read_int)(uint32_t *);
+	int (*hif_clear_int_ext)(uint32_t);
+	int (*hif_read_size)(uint32_t *);
+	int (*hif_block_tx_ext)(uint32_t, uint8_t *, uint32_t);	
+	int (*hif_block_rx_ext)(uint32_t, uint8_t *, uint32_t);	
+	int (*hif_sync_ext)(int);	
+	void (*hif_set_max_bus_speed)(void);
+	void (*hif_set_default_bus_speed)(void);
+} atwilc_hif_func_t;
 
 /*!
 *	@brief		Initialize bluetooth power device
@@ -92,6 +223,8 @@ void chip_wakeup(void);
 
 void acquire_bus(BUS_ACQUIRE_T acquire);
 void release_bus(BUS_RELEASE_T release, int source);
+
+void atwilc_debug(uint32_t flag, char *fmt, ...);
 
 struct mutex * at_pwr_dev_get_bus_lock(void);
 

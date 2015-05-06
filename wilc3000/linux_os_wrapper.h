@@ -10,7 +10,7 @@
 #ifndef LINUX_OS_WRAPPER_H
 #define LINUX_OS_WRAPPER_H
 
-#include "wilc_type.h"
+#include "atwilc_type.h"
 
 void linux_wlan_msleep(uint32_t msc);
 

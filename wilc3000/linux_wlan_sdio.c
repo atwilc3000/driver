@@ -1,4 +1,3 @@
-#include "wilc_wfi_netdevice.h"
 
 #include <linux/mmc/sdio_func.h>
 #include <linux/mmc/card.h>
@@ -6,75 +5,78 @@
 #include <linux/mmc/sdio.h>
 #include <linux/mmc/host.h>
 
+#include "linux_wlan_sdio.h"
+#include "linux_wlan_common.h"
 
 
 #if defined (NM73131_0_BOARD)
-#define SDIO_MODALIAS "wilc_sdio"
+#define SDIO_MODALIAS "atwilc_sdio"
 #else
-#define SDIO_MODALIAS "wilc1000_sdio"
+#define SDIO_MODALIAS "atwilc_sdio"
 #endif
 
-#ifdef WILC_ASIC_A0
+#ifdef ATWILC_ASIC_A0
 #if defined (NM73131_0_BOARD)
 #define MAX_SPEED 50000000
 #elif defined (PLAT_ALLWINNER_A20)
 #define MAX_SPEED 45000000 //40000000 //50000000
 #elif defined (PLAT_ALLWINNER_A31)
 #define MAX_SPEED 50000000
-#elif defined (SAMA5D4)
-#define MAX_SPEED 40000000
+#elif defined (PLAT_SAMA5D4)
+#define MAX_SPEED 40000000 // 6000000
 #else
 #define MAX_SPEED 50000000
 #endif
-#else /* WILC_ASIC_A0 */
+#else /* ATWILC_ASIC_A0 */
 /* Limit clk to 6MHz on FPGA. */
 #define MAX_SPEED 6000000
-#endif /* WILC_ASIC_A0 */
+#endif /* ATWILC_ASIC_A0 */
 
 
 struct sdio_func* local_sdio_func = NULL;
 
+static isr_handler_t isr_handler = NULL;
+
 extern struct semaphore sdio_probe_sync;
 extern void linux_wlan_unlock(void* vp);
 
-extern linux_wlan_t* g_linux_wlan;
-extern int wilc_netdev_init(void);
+extern int atwilc_netdev_init(void);
 extern int sdio_clear_int(void);
-extern void wilc_handle_isr(void);
 
 static unsigned int sdio_default_speed=0;
 
-#define SDIO_VENDOR_ID_WILC 0x0296
-#define SDIO_DEVICE_ID_WILC 0x5347
+#define SDIO_VENDOR_ID_ATWILC 0x0296
+#define SDIO_DEVICE_ID_ATWILC 0x5347
 
-static const struct sdio_device_id wilc_sdio_ids[] = {
-	{ SDIO_DEVICE(SDIO_VENDOR_ID_WILC,SDIO_DEVICE_ID_WILC) },
+static const struct sdio_device_id atwilc_sdio_ids[] = {
+	{ SDIO_DEVICE(SDIO_VENDOR_ID_ATWILC,SDIO_DEVICE_ID_ATWILC) },
 };
 
-#ifndef WILC_SDIO_IRQ_GPIO
+#ifndef ATWILC_SDIO_IRQ_GPIO
 // [[ added by rachel 13-07-18
 typedef enum {
-	WILC_SDIO_HOST_NO_TAKEN = 0,
-	WILC_SDIO_HOST_IRQ_TAKEN = 1,
-	WILC_SDIO_HOST_DIS_TAKEN = 2,
+	ATWILC_SDIO_HOST_NO_TAKEN = 0,
+	ATWILC_SDIO_HOST_IRQ_TAKEN = 1,
+	ATWILC_SDIO_HOST_DIS_TAKEN = 2,
 } sdio_host_lock;
-static sdio_host_lock	sdio_intr_lock = WILC_SDIO_HOST_NO_TAKEN;
+static sdio_host_lock	sdio_intr_lock = ATWILC_SDIO_HOST_NO_TAKEN;
 static wait_queue_head_t sdio_intr_waitqueue;
 // ]]
 #endif
 
-static void wilc_sdio_interrupt(struct sdio_func *func)
+static void atwilc_sdio_interrupt(struct sdio_func *func)
 {
-#ifndef WILC_SDIO_IRQ_GPIO
-	if(sdio_intr_lock == WILC_SDIO_HOST_DIS_TAKEN)
+#ifndef ATWILC_SDIO_IRQ_GPIO
+	if(sdio_intr_lock == ATWILC_SDIO_HOST_DIS_TAKEN)
 		return;
-	sdio_intr_lock = WILC_SDIO_HOST_IRQ_TAKEN;
+	sdio_intr_lock = ATWILC_SDIO_HOST_IRQ_TAKEN;
 	
 	sdio_release_host(func);
-	wilc_handle_isr();
+	if(isr_handler != NULL)
+		isr_handler();
 	sdio_claim_host(func);
 
-	sdio_intr_lock = WILC_SDIO_HOST_NO_TAKEN;
+	sdio_intr_lock = ATWILC_SDIO_HOST_NO_TAKEN;
 	wake_up_interruptible(&sdio_intr_waitqueue);
 #endif
 }
@@ -104,7 +106,7 @@ int linux_sdio_cmd52(sdio_cmd52_t *cmd){
 	sdio_release_host(func);
 
 	if (ret < 0) {
-		printk("wilc_sdio_cmd52..failed, err(%d)\n", ret);
+		printk("atwilc_sdio_cmd52..failed, err(%d)\n", ret);
 		return 0;
 	}
 	return 1;
@@ -134,7 +136,7 @@ int linux_sdio_cmd52(sdio_cmd52_t *cmd){
 
 
 	if (ret < 0) {
-		printk("wilc_sdio_cmd53..failed, err(%d)\n", ret);
+		printk("atwilc_sdio_cmd53..failed, err(%d)\n", ret);
 		return 0;
 	}
 
@@ -170,39 +172,40 @@ static void linux_sdio_remove(struct sdio_func *func)
 	
 }
 
-struct sdio_driver wilc_bus = {
+struct sdio_driver atwilc_bus = {
 	.name		= SDIO_MODALIAS,
-	.id_table	= wilc_sdio_ids,
+	.id_table	= atwilc_sdio_ids,
 	.probe		= linux_sdio_probe,
 	.remove		= linux_sdio_remove,
 };
 
-int enable_sdio_interrupt(void){
+int enable_sdio_interrupt(isr_handler_t p_isr_handler){
 	int ret = 0;
-#ifndef WILC_SDIO_IRQ_GPIO
+#ifndef ATWILC_SDIO_IRQ_GPIO
 	
-	sdio_intr_lock  = WILC_SDIO_HOST_NO_TAKEN;
+	sdio_intr_lock  = ATWILC_SDIO_HOST_NO_TAKEN;
 	
 	sdio_claim_host(local_sdio_func);
-	ret = sdio_claim_irq(local_sdio_func, wilc_sdio_interrupt);
+	ret = sdio_claim_irq(local_sdio_func, atwilc_sdio_interrupt);
 	sdio_release_host(local_sdio_func);
 
 	if (ret < 0) {
 		PRINT_ER("can't claim sdio_irq, err(%d)\n", ret);
 		ret = -EIO;
-	}	
+	}
+	isr_handler = p_isr_handler;
 #endif
 	return ret;
 }
 
 void disable_sdio_interrupt(void){
 
-#ifndef WILC_SDIO_IRQ_GPIO
+#ifndef ATWILC_SDIO_IRQ_GPIO
 	int ret;
 
-	if(sdio_intr_lock  == WILC_SDIO_HOST_IRQ_TAKEN ) 
-		wait_event_interruptible(sdio_intr_waitqueue, sdio_intr_lock == WILC_SDIO_HOST_NO_TAKEN );
-	sdio_intr_lock  = WILC_SDIO_HOST_DIS_TAKEN;
+	if(sdio_intr_lock  == ATWILC_SDIO_HOST_IRQ_TAKEN ) 
+		wait_event_interruptible(sdio_intr_waitqueue, sdio_intr_lock == ATWILC_SDIO_HOST_NO_TAKEN );
+	sdio_intr_lock  = ATWILC_SDIO_HOST_DIS_TAKEN;
 
 	sdio_claim_host(local_sdio_func);
 	ret = sdio_release_irq(local_sdio_func);
@@ -211,12 +214,13 @@ void disable_sdio_interrupt(void){
 		}
 	sdio_release_host(local_sdio_func);
 	
-	sdio_intr_lock  = WILC_SDIO_HOST_NO_TAKEN;
+	sdio_intr_lock  = ATWILC_SDIO_HOST_NO_TAKEN;
 #endif
 }
 
 static int linux_sdio_set_speed(int speed)
 {
+#if 1
 	struct mmc_ios ios;
 	sdio_claim_host(local_sdio_func);
 	
@@ -226,7 +230,7 @@ static int linux_sdio_set_speed(int speed)
 	local_sdio_func->card->host->ops->set_ios(local_sdio_func->card->host,&ios);
 	sdio_release_host(local_sdio_func);
 	PRINT_D(INIT_DBG,"@@@@@@@@@@@@ change SDIO speed to %d @@@@@@@@@\n", speed);
-
+#endif
 	return 1;
 }
 
@@ -236,7 +240,7 @@ static int linux_sdio_get_speed(void)
 }
 
 int linux_sdio_init(void* pv){
-#ifndef WILC_SDIO_IRQ_GPIO
+#ifndef ATWILC_SDIO_IRQ_GPIO
 	init_waitqueue_head(&sdio_intr_waitqueue);
 #endif
 	sdio_default_speed = linux_sdio_get_speed();
@@ -244,7 +248,7 @@ int linux_sdio_init(void* pv){
 }
 
 void linux_sdio_deinit(void *pv){
-	sdio_unregister_driver(&wilc_bus);
+	sdio_unregister_driver(&atwilc_bus);
 }
 
 int linux_sdio_set_max_speed(void)

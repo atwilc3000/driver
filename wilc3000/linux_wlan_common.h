@@ -44,10 +44,10 @@ enum debug_region{
 #define FIRM_DBG	  		(1<<Firmware_debug)
 #define PWRDEV_DBG	  		(1<<PwrDev_debug)
 
-#if defined (WILC_DEBUGFS)
+#if defined (ATWILC_DEBUGFS)
 extern void kmsgdump_write(char *fmt, ...);
-extern int wilc_debugfs_init(void);
-extern void wilc_debugfs_remove(void);
+extern int atwilc_debugfs_init(void);
+extern void atwilc_debugfs_remove(void);
 
 extern atomic_t REGION;
 extern atomic_t DEBUG_LEVEL;
@@ -107,28 +107,28 @@ extern atomic_t DEBUG_LEVEL;
 #define LINUX_TX_SIZE	(64*1024)
 
 
-#define WILC_MULTICAST_TABLE_SIZE	8
+#define ATWILC_MULTICAST_TABLE_SIZE	8
 
 #if defined (NM73131_0_BOARD)
 
-#define MODALIAS "wilc_spi"
-#define GPIO_NUM	IRQ_WILC1000_GPIO
+#define MODALIAS "atwilc_spi"
+#define GPIO_NUM	IRQ_ATWILC_GPIO
 
 #elif defined (BEAGLE_BOARD)
 	#define SPI_CHANNEL	4
 	
 	#if SPI_CHANNEL == 4
-		#define MODALIAS 	"wilc_spi4"
+		#define MODALIAS 	"atwilc_spi4"
 		#define GPIO_NUM	162
 	#else
-		#define MODALIAS 	"wilc_spi3"
+		#define MODALIAS 	"atwilc_spi3"
 		#define GPIO_NUM	133
 	#endif
 #elif defined(PANDA_BOARD)
-	#define MODALIAS 	"WILC_SPI"
+	#define MODALIAS 	"ATWILC_SPI"
 	#define GPIO_NUM	139
 #else
-	#define MODALIAS 	"WILC_SPI"
+	#define MODALIAS 	"ATWILC_SPI"
 	#define GPIO_NUM	139
 
 #endif
