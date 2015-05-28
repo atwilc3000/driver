@@ -267,7 +267,7 @@ typedef struct{
 	
 	struct semaphore rxq_thread_started;
 	struct semaphore txq_thread_started;
-	struct semaphore wdt_thread_ended;
+	struct semaphore wdt_thread_sem;
 
 	struct task_struct* rxq_thread;
 	struct task_struct* txq_thread;

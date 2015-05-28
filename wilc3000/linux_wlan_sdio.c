@@ -15,23 +15,6 @@
 #define SDIO_MODALIAS "atwilc_sdio"
 #endif
 
-#ifdef ATWILC_ASIC_A0
-#if defined (NM73131_0_BOARD)
-#define MAX_SPEED 50000000
-#elif defined (PLAT_ALLWINNER_A20)
-#define MAX_SPEED 45000000 //40000000 //50000000
-#elif defined (PLAT_ALLWINNER_A31)
-#define MAX_SPEED 50000000
-#elif defined (PLAT_SAMA5D4)
-#define MAX_SPEED 40000000 // 6000000
-#else
-#define MAX_SPEED 50000000
-#endif
-#else /* ATWILC_ASIC_A0 */
-/* Limit clk to 6MHz on FPGA. */
-#define MAX_SPEED 6000000
-#endif /* ATWILC_ASIC_A0 */
-
 
 struct sdio_func* local_sdio_func = NULL;
 
@@ -43,7 +26,6 @@ extern void linux_wlan_unlock(void* vp);
 extern int atwilc_netdev_init(void);
 extern int sdio_clear_int(void);
 
-static unsigned int sdio_default_speed=0;
 
 #define SDIO_VENDOR_ID_ATWILC 0x0296
 #define SDIO_DEVICE_ID_ATWILC 0x5347
@@ -184,6 +166,8 @@ int enable_sdio_interrupt(isr_handler_t p_isr_handler){
 #ifndef ATWILC_SDIO_IRQ_GPIO
 	
 	sdio_intr_lock  = ATWILC_SDIO_HOST_NO_TAKEN;
+
+	isr_handler = p_isr_handler;
 	
 	sdio_claim_host(local_sdio_func);
 	ret = sdio_claim_irq(local_sdio_func, atwilc_sdio_interrupt);
@@ -193,7 +177,7 @@ int enable_sdio_interrupt(isr_handler_t p_isr_handler){
 		PRINT_ER("can't claim sdio_irq, err(%d)\n", ret);
 		ret = -EIO;
 	}
-	isr_handler = p_isr_handler;
+	
 #endif
 	return ret;
 }
@@ -218,48 +202,14 @@ void disable_sdio_interrupt(void){
 #endif
 }
 
-static int linux_sdio_set_speed(int speed)
-{
-#if 1
-	struct mmc_ios ios;
-	sdio_claim_host(local_sdio_func);
-	
-	memcpy((void *)&ios,(void *)&local_sdio_func->card->host->ios,sizeof(struct mmc_ios));
-	local_sdio_func->card->host->ios.clock = speed;
-	ios.clock = speed;
-	local_sdio_func->card->host->ops->set_ios(local_sdio_func->card->host,&ios);
-	sdio_release_host(local_sdio_func);
-	PRINT_D(INIT_DBG,"@@@@@@@@@@@@ change SDIO speed to %d @@@@@@@@@\n", speed);
-#endif
-	return 1;
-}
-
-static int linux_sdio_get_speed(void)
-{
-	return local_sdio_func->card->host->ios.clock;
-}
-
 int linux_sdio_init(void* pv){
 #ifndef ATWILC_SDIO_IRQ_GPIO
 	init_waitqueue_head(&sdio_intr_waitqueue);
 #endif
-	sdio_default_speed = linux_sdio_get_speed();
 	return 1;
 }
 
 void linux_sdio_deinit(void *pv){
 	sdio_unregister_driver(&atwilc_bus);
 }
-
-int linux_sdio_set_max_speed(void)
-{
-	return linux_sdio_set_speed(MAX_SPEED);
-}
-
-int linux_sdio_set_default_speed(void)
-{
-	return linux_sdio_set_speed(sdio_default_speed);
-}
-
-
 

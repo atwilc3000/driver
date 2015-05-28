@@ -35,7 +35,8 @@ ATL_ErrNo ATL_SemaphoreAcquire(ATL_SemaphoreHandle* pHandle,
 	ATL_ErrNo s32RetStatus = ATL_SUCCESS;
 
 	#ifndef CONFIG_ATL_SEMAPHORE_TIMEOUT
-	while(down_interruptible(pHandle)); //jude
+	//while(down_interruptible(pHandle)); //jude
+	down(pHandle);
 
 	#else
 	if(pstrAttrs == ATL_NULL)

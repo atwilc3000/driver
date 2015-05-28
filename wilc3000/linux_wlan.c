@@ -121,10 +121,17 @@ static struct semaphore close_exit_sync;
 unsigned int int_rcvdU;
 unsigned int int_rcvdB;
 
+extern ATL_Uint8* gu8FlushedJoinReq;
+extern ATL_Uint8* gu8FlushedInfoElemAsoc;
+extern ATL_Uint32 gu8FlushedJoinReqDrvHandler;
+extern ATL_Bool gbScanWhileConnected;
+	
 static int wlan_deinit_locks(linux_wlan_t* nic);
 static void wlan_deinitialize_threads(linux_wlan_t* nic);
 extern void ATWILC_WFI_monitor_rx(uint8_t *buff, uint32_t size);
 extern void ATWILC_WFI_p2p_rx(struct net_device *dev,uint8_t *buff, uint32_t size);
+extern Handle_ScanDone(void* drvHandler,tenuScanEvent enuEvent);
+
 
 static void linux_wlan_tx_complete(void* priv, int status);
 void frmw_to_linux(uint8_t *buff, uint32_t size,uint32_t pkt_offset);
@@ -237,14 +244,20 @@ void Reset_WatchDogdebugger()
 int bDebugThreadRunning = 0;
 static int DebuggingThreadTask(void* vp)
 {
+	tstrATWILC_WFIDrv* pstrWFIDrv;
+	ATL_Uint32 drvHandler;
 	int timeout = 100;
-	int i = 0;	
-	while(bDebugThreadRunning)
-	{
+	int i = 0;
+
+
+	/* inform atwilc_wlan_init that Debugging task is started. */
+	linux_wlan_unlock(&g_linux_wlan->wdt_thread_sem);
+	
+	while(1)
+	{	
 		if(g_linux_wlan->atwilc_initialized)
 		{
-			printk("*** Debug Thread Running ***\n");
-			if(!linux_wlan_lock_timeout(&g_linux_wlan->wdt_thread_ended,6000))
+			if(!linux_wlan_lock_timeout(&g_linux_wlan->wdt_thread_sem,6000))
 			{
 				while(!kthread_should_stop())
 					schedule();
@@ -253,7 +266,7 @@ static int DebuggingThreadTask(void* vp)
 			}
 
 			if(bDebugThreadRunning)
-			{			
+			{
 				if(cfg_timed_out_cnt >= 5)
 				{
 					cfg_timed_out_cnt = 0;					
@@ -282,6 +295,86 @@ static int DebuggingThreadTask(void* vp)
 						{
 							printk("Couldn't restart interface %d again \n", i);
 						}
+					}
+					pstrWFIDrv = (tstrATWILC_WFIDrv*)(g_linux_wlan->strInterfaceInfo[0].drvHandler);
+					drvHandler = (ATL_Uint32)(g_linux_wlan->strInterfaceInfo[0].drvHandler);
+					
+					if(pstrWFIDrv->enuHostIFstate == HOST_IF_CONNECTED)
+					{
+						tstrDisconnectNotifInfo strDisconnectNotifInfo;
+						
+						PRINT_D(GENERIC_DBG, "notify the upper layer with the wlan Disconnection\n");						
+
+						ATL_memset(&strDisconnectNotifInfo, 0, sizeof(tstrDisconnectNotifInfo));
+
+						if(pstrWFIDrv->strATWILC_UsrScanReq.pfUserScanResult)
+						{                
+					       	printk("\n\n<< Abort the running OBSS Scan >> \n\n");
+							ATL_TimerStop(&(pstrWFIDrv->hScanTimer), ATL_NULL);
+							Handle_ScanDone((void*)pstrWFIDrv,SCAN_EVENT_ABORTED);              
+						}			
+
+						strDisconnectNotifInfo.u16reason = 0;
+						strDisconnectNotifInfo.ie = NULL;
+						strDisconnectNotifInfo.ie_len = 0;
+						
+						if(pstrWFIDrv->strATWILC_UsrConnReq.pfUserConnectResult != NULL)
+						{
+							#ifdef DISABLE_PWRSAVE_AND_SCAN_DURING_IP							
+							g_obtainingIP=ATL_FALSE;
+							host_int_set_power_mgmt((ATWILC_WFIDrvHandle)pstrWFIDrv, 0, 0);
+							#endif
+							
+							pstrWFIDrv->strATWILC_UsrConnReq.pfUserConnectResult(CONN_DISCONN_EVENT_DISCONN_NOTIF, 
+																		      	      NULL,
+																		      	      0,
+																		      	      &strDisconnectNotifInfo,
+																		      	      pstrWFIDrv->strATWILC_UsrConnReq.u32UserConnectPvoid);
+						}
+						else
+						{
+							PRINT_ER("Connect result callback function is NULL \n");
+						}
+
+						ATL_memset(pstrWFIDrv->au8AssociatedBSSID, 0, ETH_ALEN);
+						
+						pstrWFIDrv->strATWILC_UsrConnReq.ssidLen = 0;
+						if(pstrWFIDrv->strATWILC_UsrConnReq.pu8ssid != NULL)
+						{
+							ATL_FREE(pstrWFIDrv->strATWILC_UsrConnReq.pu8ssid);
+							pstrWFIDrv->strATWILC_UsrConnReq.pu8ssid = NULL;
+						}
+
+						if(pstrWFIDrv->strATWILC_UsrConnReq.pu8bssid != NULL)
+						{
+							ATL_FREE(pstrWFIDrv->strATWILC_UsrConnReq.pu8bssid);
+							pstrWFIDrv->strATWILC_UsrConnReq.pu8bssid = NULL;
+						}
+
+						pstrWFIDrv->strATWILC_UsrConnReq.ConnReqIEsLen = 0;
+						if(pstrWFIDrv->strATWILC_UsrConnReq.pu8ConnReqIEs != NULL)
+						{
+							ATL_FREE(pstrWFIDrv->strATWILC_UsrConnReq.pu8ConnReqIEs);
+							pstrWFIDrv->strATWILC_UsrConnReq.pu8ConnReqIEs = NULL;
+						}			
+
+						/*BugID_5213*/
+						/*Freeing flushed join request params on receiving*/
+						/*MAC_DISCONNECTED while connected*/
+						if(gu8FlushedJoinReq != NULL && gu8FlushedJoinReqDrvHandler==(ATL_Uint32)drvHandler)
+						{
+							ATL_FREE(gu8FlushedJoinReq);
+							gu8FlushedJoinReq = NULL;
+						}
+						if(gu8FlushedInfoElemAsoc != NULL && gu8FlushedJoinReqDrvHandler==(ATL_Uint32)drvHandler)
+						{
+							ATL_FREE(gu8FlushedInfoElemAsoc);
+							gu8FlushedInfoElemAsoc = NULL;
+						}
+
+						pstrWFIDrv->enuHostIFstate = HOST_IF_IDLE;
+						gbScanWhileConnected = ATL_FALSE;
+						
 					}
 					gbCrashRecover = 0;		
 				}				
@@ -1352,13 +1445,6 @@ void atwilc_wlan_deinit(linux_wlan_t *nic) {
 			return;
 		}
 
-#if defined(PLAT_ALLWINNER_A20) || defined(PLAT_ALLWINNER_A23) || defined(PLAT_ALLWINNER_A31) || defined(PLAT_SAMA5D4)
-
-		PRINT_D(INIT_DBG,"skip atwilc_bus_set_default_speed\n");
-#else
-		atwilc_bus_set_default_speed();
-#endif
-
 		PRINT_D(INIT_DBG,"Disabling IRQ\n");
 		#if (!defined ATWILC_SDIO) || (defined ATWILC_SDIO_IRQ_GPIO)
 			linux_wlan_disable_irq(IRQ_WAIT);
@@ -1455,7 +1541,7 @@ int wlan_init_locks(linux_wlan_t* p_nic){
 
 	linux_wlan_init_lock("rxq_lock/rxq_started",&g_linux_wlan->rxq_thread_started,0);
 	linux_wlan_init_lock("rxq_lock/txq_started",&g_linux_wlan->txq_thread_started,0);
-	linux_wlan_init_lock("wdt_lock/wdt_ended",&g_linux_wlan->wdt_thread_ended,0); //TicketId1003
+	linux_wlan_init_lock("wdt_lock/wdt_sem",&g_linux_wlan->wdt_thread_sem,0); //TicketId1003
 
 	#if (RX_BH_TYPE == RX_BH_KTHREAD)
 		linux_wlan_init_lock("BH_SEM", &g_linux_wlan->rx_sem, 0);
@@ -1495,8 +1581,8 @@ static int wlan_deinit_locks(linux_wlan_t* nic){
 		linux_wlan_deinit_lock(&g_linux_wlan->txq_thread_started);
 
 	/*TicketId1003*/
-	if(&g_linux_wlan->wdt_thread_ended != NULL)
-		linux_wlan_deinit_lock(&g_linux_wlan->wdt_thread_ended);
+	if(&g_linux_wlan->wdt_thread_sem != NULL)
+		linux_wlan_deinit_lock(&g_linux_wlan->wdt_thread_sem);
 
 	if(&g_linux_wlan->cfg_event != NULL)
 		linux_wlan_deinit_lock(&g_linux_wlan->cfg_event);
@@ -1605,6 +1691,9 @@ int wlan_initialize_threads(perInterface_wlan_t* nic){
 		goto _fail_2;
 	}
 
+	/* wait for TXQ task to start. */
+	linux_wlan_lock(&g_linux_wlan->txq_thread_started);
+	
 	/*TicketId1003*/
 	if(bDebugThreadRunning == 0)
 	{		
@@ -1616,10 +1705,9 @@ int wlan_initialize_threads(perInterface_wlan_t* nic){
 			goto _fail_3;
 		}
 		bDebugThreadRunning = 1;
+		/* wait for dbg task to start. */
+		linux_wlan_lock(&g_linux_wlan->wdt_thread_sem);
 	}
-
-	/* wait for TXQ task to start. */
-	linux_wlan_lock(&g_linux_wlan->txq_thread_started);
 	
 	return 0;
 
@@ -1631,22 +1719,23 @@ int wlan_initialize_threads(perInterface_wlan_t* nic){
 		kthread_stop(g_linux_wlan->txq_thread);
 	
 	_fail_2:
+	#ifndef TCP_ENHANCEMENTS
 		/*De-Initialize 2nd thread*/
 		g_linux_wlan->close = 1;
 		linux_wlan_unlock(&g_linux_wlan->rxq_event);
 		kthread_stop(g_linux_wlan->rxq_thread);
-
-#ifndef TCP_ENHANCEMENTS
+	#endif
+	
 	_fail_1:
 	#if(RX_BH_TYPE == RX_BH_KTHREAD)
 		/*De-Initialize 1st thread*/
 		g_linux_wlan->close = 1;
 		linux_wlan_unlock(&g_linux_wlan->rx_sem);
 		kthread_stop(g_linux_wlan->rx_bh_thread);
-#endif
+	#endif
 		
 	_fail_:
-	#endif
+	
 		g_linux_wlan->close = 0;
 		return ret;	
 }
@@ -1654,12 +1743,12 @@ int wlan_initialize_threads(perInterface_wlan_t* nic){
 static void wlan_deinitialize_threads(linux_wlan_t* nic)
 {
 	/*TicketId1003*/
-	PRINT_D(INIT_DBG,"wlan_deinitalize_threads\n");
+	PRINT_D(INIT_DBG,"Deinitializing Threads\n");
 	if(!gbCrashRecover){
 		PRINT_D(INIT_DBG,"Deinitializing debug Thread\n");
 		bDebugThreadRunning = 0;
-		if(&g_linux_wlan->wdt_thread_ended != NULL){
-			linux_wlan_unlock(&g_linux_wlan->wdt_thread_ended);
+		if(&g_linux_wlan->wdt_thread_sem != NULL){
+			linux_wlan_unlock(&g_linux_wlan->wdt_thread_sem);
 		}
 		if(nic->wdt_thread != NULL){
 			kthread_stop(nic->wdt_thread);
@@ -1668,8 +1757,8 @@ static void wlan_deinitialize_threads(linux_wlan_t* nic)
 	}
 	
 	g_linux_wlan->close = 1;
-	PRINT_D(INIT_DBG,"Deinitializing Threads\n");
-	
+
+#ifndef TCP_ENHANCEMENTS
 	if(&g_linux_wlan->rxq_event != NULL)
 		linux_wlan_unlock(&g_linux_wlan->rxq_event);
 
@@ -1678,7 +1767,7 @@ static void wlan_deinitialize_threads(linux_wlan_t* nic)
 		kthread_stop(g_linux_wlan->rxq_thread);
 		g_linux_wlan->rxq_thread = NULL;
 	}
-
+#endif
 	
 	if(&g_linux_wlan->txq_event != NULL)
 		linux_wlan_unlock(&g_linux_wlan->txq_event);
@@ -1842,7 +1931,7 @@ int atwilc_wlan_init(struct net_device *dev,perInterface_wlan_t* p_nic)
 			ret = -EIO;
 			goto _fail_locks_;
 		}	
-		printk("ATWILC Initialization done");
+		printk("ATWILC Initialization done\n");
 		memcpy(&g_linux_wlan->oup, &nwo, sizeof(atwilc_wlan_oup_t));
 
 		/*Save the oup structre into global pointer*/
@@ -1937,8 +2026,6 @@ int atwilc_wlan_init(struct net_device *dev,perInterface_wlan_t* p_nic)
 
 		
 #endif
-
-		atwilc_bus_set_max_speed();
 
 		if (g_linux_wlan->oup.wlan_cfg_get(1, WID_FIRMWARE_VERSION, 1,0))
 		{
@@ -2665,6 +2752,7 @@ void frmw_to_linux(uint8_t *buff, uint32_t size,uint32_t pkt_offset){
 			/*buffer it to be passed later.*/
 			priv = wdev_priv(atwilc_netdev->ieee80211_ptr);
 			if((buff_to_send[12]==0x88 && buff_to_send[13]==0x8e)
+				&& (nic->iftype == STATION_MODE || nic->iftype == CLIENT_MODE)
 				&& (!(memcmp(priv->au8AssociatedBss, null_bssid, ETH_ALEN))))
 			{
 				/*Allocate memory*/
@@ -3004,7 +3092,6 @@ static void __exit exit_atwilc_driver(void)
 	#endif
 	at_pwr_dev_deinit();
 	at_pwr_power_down(PWR_DEV_SRC_WIFI);
-
 }
 module_exit(exit_atwilc_driver);
 

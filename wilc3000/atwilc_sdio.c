@@ -23,8 +23,6 @@ typedef struct {
 	uint32_t block_size;
 	int (*sdio_cmd52)(sdio_cmd52_t *);
 	int (*sdio_cmd53)(sdio_cmd53_t *);
-	int (*sdio_set_max_speed)(void);
-	int (*sdio_set_default_speed)(void);
 	atwilc_debug_func dPrint;
 	int nint;
 #define MAX_NUN_INT_THRPT_ENH2 (5) /* Max num interrupts allowed in registers 0xf7, 0xf8 */
@@ -265,7 +263,7 @@ static int sdio_write_reg(uint32_t addr, uint32_t data)
 		cmd.address = addr;
 		cmd.data = data;
 		if (!g_sdio.sdio_cmd52(&cmd)) {
-			g_sdio.dPrint(N_ERR, "[atwilc sdio]: Failed cmd 52, read reg (%08x) ...\n", addr);
+			g_sdio.dPrint(N_ERR, "[atwilc sdio]: Failed cmd 52, write reg (%08x) ...\n", addr);
 			goto _fail_;
 		}
 	}
@@ -694,9 +692,6 @@ static int sdio_init(atwilc_wlan_inp_t *inp, atwilc_debug_func func)
 
 	g_sdio.sdio_cmd52 	= inp->io_func.u.sdio.sdio_cmd52;
 	g_sdio.sdio_cmd53 	= inp->io_func.u.sdio.sdio_cmd53;
-	g_sdio.sdio_set_max_speed 	= inp->io_func.u.sdio.sdio_set_max_speed;
-	g_sdio.sdio_set_default_speed 	= inp->io_func.u.sdio.sdio_set_default_speed;
-	
 	/**
 		function 0 csa enable 
 	**/
@@ -794,16 +789,6 @@ static int sdio_init(atwilc_wlan_inp_t *inp, atwilc_debug_func func)
 _fail_:
 
 	return 0;
-}
-
-static void sdio_set_max_speed(void)
-{
-	g_sdio.sdio_set_max_speed();
-}
-
-static void sdio_set_default_speed(void)
-{
-	g_sdio.sdio_set_default_speed();
 }
 
 static int sdio_read_size(uint32_t * size)
@@ -1152,8 +1137,5 @@ atwilc_hif_func_t hif_sdio = {
 	sdio_write,
 	sdio_read,
 	sdio_sync_ext,
-
-	sdio_set_max_speed,
-	sdio_set_default_speed,
 };
 

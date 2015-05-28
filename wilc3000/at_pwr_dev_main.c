@@ -42,7 +42,10 @@ unsigned int int_clrd;
 /*****************************************************************************/
 /*								Macros										 */
 /*****************************************************************************/ 
-#define DOWNLOAD_BT_FW_ONCE	/* tony */
+#define DOWNLOAD_BT_FW_ONCE
+#ifndef BT_FIRMWARE
+#define BT_FIRMWARE		"bt_firmware.bin"
+#endif
 #define rCOEXIST_CTL 			(0x161E00)
 #define rGLOBAL_MODE_CONTROL	(0x1614)
 
@@ -64,6 +67,7 @@ typedef struct {
 	struct mutex cs;
 	uint8_t bus_registered[PWR_DEV_SRC_MAX];
 	uint8_t power_status[PWR_DEV_SRC_MAX];
+	uint8_t keep_awake[PWR_DEV_SRC_MAX];
 	atwilc_hif_func_t hif_func;
 	struct mutex hif_cs;
 #ifdef DOWNLOAD_BT_FW_ONCE
@@ -106,6 +110,8 @@ static ssize_t pwr_dev_write(struct file *f, const char __user *buff, size_t len
 static int cmd_handle_bt_download_fw(int source);
 static int cmd_handle_bt_power_up(int source);
 static int cmd_handle_bt_power_down(int source);
+static int cmd_handle_bt_fw_chip_wake_up(int source);
+static int cmd_handle_bt_fw_chip_allow_sleep(int source);
 
 static int atwilc_bt_firmware_download(void);
 static int atwilc_bt_start(void);
@@ -119,6 +125,8 @@ static const cmd_handle_entry_t cmd_table[] = {
 		{"BT_DOWNLOAD_FW", cmd_handle_bt_download_fw},
 		{"BT_POWER_UP", cmd_handle_bt_power_up},
 		{"BT_POWER_DOWN", cmd_handle_bt_power_down},
+		{"BT_FW_CHIP_WAKEUP", cmd_handle_bt_fw_chip_wake_up},
+		{"BT_FW_CHIP_ALLOW_SLEEP", cmd_handle_bt_fw_chip_allow_sleep},
 		{(const char *) NULL, NULL}, // Keep the NULL handler at the end of the table
 };
 
@@ -448,7 +456,7 @@ static ssize_t pwr_dev_write(struct file *f, const char __user *buff, size_t len
 	PRINT_D(PWRDEV_DBG, "at_pwr_dev: dev_write size %d\n", len);
 	if(len > 0)
 	{
-		PRINT_D(PWRDEV_DBG, "received%s\n", buff);
+		PRINT_D(PWRDEV_DBG, "received %s\n", buff);
 
 		// call the appropriate command handler
 		cmd_entry = (cmd_handle_entry_t *)cmd_table;
@@ -496,7 +504,7 @@ static int cmd_handle_bt_power_down(int source)
 	/* Adjust coexistence module. This should be done from the FW in the future*/
 	if(pwr_dev.bus_registered[PWR_DEV_SRC_BT] == true)
 	{		
-		acquire_bus(ACQUIRE_AND_WAKEUP);
+		acquire_bus(ACQUIRE_AND_WAKEUP,PWR_DEV_SRC_WIFI);
 		
 		ret = pwr_dev.hif_func.hif_read_reg(rGLOBAL_MODE_CONTROL, &reg);
 		if (!ret) {
@@ -618,6 +626,24 @@ static int cmd_handle_bt_download_fw(int source)
 	return 0;
 }
 
+
+	
+static int cmd_handle_bt_fw_chip_wake_up(int source)
+{
+	chip_wakeup(source);
+	return 0;
+}
+
+
+	
+static int cmd_handle_bt_fw_chip_allow_sleep(int source)
+{
+	
+	chip_allow_sleep(source);
+	return 0;
+}
+
+
 void prepare_inp(atwilc_wlan_inp_t* nwi)
 {	
 	nwi->os_context.os_private = (void *)&pwr_dev;
@@ -645,8 +671,6 @@ void prepare_inp(atwilc_wlan_inp_t* nwi)
 	nwi->io_func.io_deinit = linux_sdio_deinit;
 	nwi->io_func.u.sdio.sdio_cmd52 = linux_sdio_cmd52;
 	nwi->io_func.u.sdio.sdio_cmd53 = linux_sdio_cmd53;
-	nwi->io_func.u.sdio.sdio_set_max_speed = linux_sdio_set_max_speed;
-	nwi->io_func.u.sdio.sdio_set_default_speed = linux_sdio_set_default_speed;
 #else
 	nwi->io_func.io_type = HIF_SPI;
 	nwi->io_func.io_init = linux_spi_init;
@@ -654,29 +678,39 @@ void prepare_inp(atwilc_wlan_inp_t* nwi)
 	nwi->io_func.u.spi.spi_tx = linux_spi_write;
 	nwi->io_func.u.spi.spi_rx = linux_spi_read;
 	nwi->io_func.u.spi.spi_trx = linux_spi_write_read;
-	nwi->io_func.u.spi.spi_max_speed = linux_spi_set_max_speed;
 #endif
 }
 
 
-void chip_allow_sleep(void)
+void chip_allow_sleep(int source)
 {
 	uint32_t reg=0;
 
-	//ATL_PRINTF("in chip_allow_sleep()\n");
-
-	#ifdef ATWILC_SDIO
-	pwr_dev.hif_func.hif_read_reg(0xf0, &reg);
-	pwr_dev.hif_func.hif_write_reg(0xf0, reg & ~(1 << 0));	
-	#else
-	pwr_dev.hif_func.hif_read_reg(0x1, &reg);
-	pwr_dev.hif_func.hif_write_reg(0x1, reg & ~(1 << 1));	
-	#endif
-	
-	genuChipPSstate = CHIP_SLEEPING_AUTO;
+	if(((source == PWR_DEV_SRC_WIFI) &&  (pwr_dev.keep_awake[PWR_DEV_SRC_BT] == true)) ||
+		((source == PWR_DEV_SRC_BT) &&  (pwr_dev.keep_awake[PWR_DEV_SRC_WIFI] == true)))
+	{
+		PRINT_WRN(PWRDEV_DBG, "Another device is preventing allow sleep operation. request source is %s\n",
+			(source==PWR_DEV_SRC_WIFI? "Wifi":"BT"));
+	}
+	else
+	{
+		//PRINT_D(PWRDEV_DBG,"Allow chip sleep.. source: (%s)\n", source==PWR_DEV_SRC_WIFI?"wifi":"bt");
+		#ifdef ATWILC_SDIO
+		pwr_dev.hif_func.hif_read_reg(0xf0, &reg);
+		pwr_dev.hif_func.hif_write_reg(0xf0, reg & ~(1 << 0));	
+		#else
+		pwr_dev.hif_func.hif_read_reg(0x1, &reg);
+		pwr_dev.hif_func.hif_write_reg(0x1, reg & ~(1 << 1));	
+		#endif
+	}
+	if(source == PWR_DEV_SRC_WIFI)
+	{
+		genuChipPSstate = CHIP_SLEEPING_AUTO;
+	}
+	pwr_dev.keep_awake[source] = false;
 }
 
-void chip_wakeup(void)
+void chip_wakeup(int source)
 {
 	uint32_t wakeup_reg_val, clk_status_reg_val, trials=0; 
 #ifdef ATWILC_SDIO
@@ -736,25 +770,14 @@ void chip_wakeup(void)
 			pwr_dev.hif_func.hif_write_reg(u32WakeupReg, wakeup_reg_val & (~u32WakepBit));
 		}
 	}while(((clk_status_reg_val & u32ClkStsBit) == 0) && (wake_seq_trials-- >0));
-
-
-	if(genuChipPSstate == CHIP_SLEEPING_MANUAL)
-	{
-		uint32_t reg_val;
-		
-		//g_wlan.hif_func.hif_read_reg(0x1C0C, &reg);
-		pwr_dev.hif_func.hif_read_reg(0x1C0C, &reg_val);
-		reg_val &= ~(1<<0);
-		//g_wlan.hif_func.hif_write_reg(0x1C0C, reg);
-		pwr_dev.hif_func.hif_write_reg(0x1C0C, reg_val);
-
-			/* Enable PALDO back right after wakeup *//* Don't need for ATWILC3000 for now*/
-	}
+	
 	genuChipPSstate = CHIP_WAKEDUP;
+	
+	pwr_dev.keep_awake[source] = true;
 }
 
 /*BugID_5213*/
-void acquire_bus(BUS_ACQUIRE_T acquire)
+void acquire_bus(BUS_ACQUIRE_T acquire,int source)
 {
 
 	//g_wlan.os_func.os_enter_cs(g_wlan.hif_lock);
@@ -763,13 +786,13 @@ void acquire_bus(BUS_ACQUIRE_T acquire)
 	if(genuChipPSstate != CHIP_WAKEDUP)
 	{
 		if(acquire == ACQUIRE_AND_WAKEUP)
-			chip_wakeup();
+			chip_wakeup(source);
 	}	
 }
 void release_bus(BUS_RELEASE_T release, int source)
 {
 	if(release == RELEASE_ALLOW_SLEEP)
-		chip_allow_sleep();
+		chip_allow_sleep(source);
 
 	
 	if(source == PWR_DEV_SRC_WIFI)
@@ -910,7 +933,7 @@ int at_pwr_power_up(int source)
 	linux_wlan_unlock_mutex(&pwr_dev.cs);
 
 	return 0;
-}
+}
 
 static int atwilc_bt_firmware_download(void)
 {
@@ -927,11 +950,13 @@ static int atwilc_bt_firmware_download(void)
 #ifdef ATWILC_SDIO
 	if( request_firmware(&atwilc_bt_firmware,BT_FIRMWARE, dev) != 0){
 		PRINT_ER("%s - firmare not available. Skip!\n",BT_FIRMWARE);
+		ret = -1;
 		goto _fail_1;
 	}
 #else
 	if( request_firmware(&atwilc_bt_firmware,BT_FIRMWARE, dev) != 0){
 		PRINT_ER("%s - firmare not available. Skip!\n",BT_FIRMWARE);
+		ret = -1;
 		goto _fail_1;
 	}
 #endif
@@ -941,9 +966,10 @@ static int atwilc_bt_firmware_download(void)
 	if(buffer_size <= 0)
 	{
 		PRINT_ER("Firmware size = 0!\n");
+		ret = -1;
 		goto _fail_1;
 	}
-	acquire_bus(ACQUIRE_AND_WAKEUP);
+	acquire_bus(ACQUIRE_AND_WAKEUP,PWR_DEV_SRC_WIFI);
 	
 	ret = pwr_dev.hif_func.hif_write_reg(0x4f0000, 0x71);
 	if (!ret) {
@@ -1056,7 +1082,7 @@ static int atwilc_bt_firmware_download(void)
 			/* Copy firmware into a DMA coherent buffer */
 			memcpy(dma_buffer, &buffer[offset], size2);
 			
-			acquire_bus(ACQUIRE_AND_WAKEUP);
+			acquire_bus(ACQUIRE_AND_WAKEUP,PWR_DEV_SRC_WIFI);
 			
 			ret = pwr_dev.hif_func.hif_block_tx(addr, dma_buffer, size2);
 
@@ -1104,7 +1130,10 @@ _fail_1:
 	PRINT_D(GENERIC_DBG,"Releasing BT firmware\n");
 	release_firmware(atwilc_bt_firmware);
 
-	PRINT_D(INIT_DBG,"BT Download Succeeded \n");	
+	if(ret >= 0)
+	{
+		PRINT_D(INIT_DBG,"BT Download Succeeded \n");	
+	}
 	
 	return (ret < 0)? ret:0;
 }
@@ -1120,7 +1149,7 @@ static int atwilc_bt_start(void)
 
 	//p->hif_func.hif_write_reg(0x150014, reg);
 	
-	acquire_bus(ACQUIRE_AND_WAKEUP);
+	acquire_bus(ACQUIRE_AND_WAKEUP,PWR_DEV_SRC_WIFI);
 
 	PRINT_D(GENERIC_DBG,"Starting BT firmware\n");
 

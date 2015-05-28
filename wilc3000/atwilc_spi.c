@@ -21,7 +21,6 @@ typedef struct {
 	int (*spi_tx)(uint8_t *, uint32_t);
 	int (*spi_rx)(uint8_t *, uint32_t);
 	int (*spi_trx)(uint8_t *, uint8_t *, uint32_t);
-	int (*spi_max_speed)(void);
 	atwilc_debug_func dPrint;
 	int crc_off;
 	int nint;
@@ -1160,7 +1159,6 @@ static int spi_init(atwilc_wlan_inp_t *inp, atwilc_debug_func func)
 	g_spi.spi_tx = inp->io_func.u.spi.spi_tx;
 	g_spi.spi_rx = inp->io_func.u.spi.spi_rx;
 	g_spi.spi_trx = inp->io_func.u.spi.spi_trx;
-	g_spi.spi_max_speed = inp->io_func.u.spi.spi_max_speed;
 
 	/**
 		configure protocol 
@@ -1208,15 +1206,6 @@ static int spi_init(atwilc_wlan_inp_t *inp, atwilc_debug_func func)
 	int_clrd = 0;
 
 	return 1;
-}
-
-static void spi_max_bus_speed(void)
-{
-	g_spi.spi_max_speed();	
-}
-
-static void spi_default_bus_speed(void)
-{
 }
 
 static int spi_read_size(uint32_t * size)
@@ -1447,7 +1436,5 @@ atwilc_hif_func_t hif_spi = {
 	spi_write,
 	spi_read,	
 	spi_sync_ext,
-	spi_max_bus_speed,
-	spi_default_bus_speed,
 };
 

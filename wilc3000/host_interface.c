@@ -655,7 +655,7 @@ ATL_Uint32 gu8FlushedJoinReqDrvHandler = 0;
 static void* host_int_ParseJoinBssParam(tstrNetworkInfo* ptstrNetworkInfo);
 #endif /*ATWILC_PARSE_SCAN_IN_HOST*/
 
-extern void chip_sleep_manually(ATL_Uint32 u32SleepTime);
+extern void chip_sleep_manually(ATL_Uint32 u32SleepTime , int source);
 extern int linux_wlan_get_num_conn_ifcs(void);
 
 /*TicketId1001*/
@@ -1671,7 +1671,7 @@ static ATL_Sint32 Handle_Scan(void * drvHandler,tstrHostIFscanAttr* pstrHostIFsc
 *  @date	
 *  @version	1.0
 */
-static ATL_Sint32 Handle_ScanDone(void* drvHandler,tenuScanEvent enuEvent)
+ATL_Sint32 Handle_ScanDone(void* drvHandler,tenuScanEvent enuEvent)
 {
 	ATL_Sint32 s32Error = ATL_SUCCESS;
 
@@ -3519,17 +3519,51 @@ static void Handle_Disconnect(void* drvHandler)
 					
 		if(pstrWFIDrv->strATWILC_UsrConnReq.pfUserConnectResult != NULL)
 		{
-
-			/*BugID_5193*/
-			/*Stop connect timer, if connection in progress*/
+			/*TicketId1002*/
+			/*Check on host interface state, if:*/
+			/*(1) HOST_IF_WAITING_CONN_RESP --> post CONN_DISCONN_EVENT_CONN_RESP event*/
+			/*(2) HOST_IF_CONNECTED --> post CONN_DISCONN_EVENT_DISCONN_NOTIF event*/
 			if(pstrWFIDrv->enuHostIFstate == HOST_IF_WAITING_CONN_RESP)
 			{
-				printk("Upper layer requested termination of connection\n");
-				ATL_TimerStop(&(pstrWFIDrv->hConnectTimer), ATL_NULL);
-			}
+				tstrConnectInfo strConnectInfo;
+				ATL_memset(&strConnectInfo, 0, sizeof(tstrConnectInfo));
 
-			pstrWFIDrv->strATWILC_UsrConnReq.pfUserConnectResult(CONN_DISCONN_EVENT_DISCONN_NOTIF, NULL,
-				0, &strDisconnectNotifInfo,pstrWFIDrv->strATWILC_UsrConnReq.u32UserConnectPvoid);
+				/*Stop connect timer, if connection in progress*/
+				ATL_TimerStop(&(pstrWFIDrv->hConnectTimer), ATL_NULL);
+
+				if(pstrWFIDrv->strATWILC_UsrConnReq.pu8bssid != NULL)
+				{
+					ATL_memcpy(strConnectInfo.au8bssid, pstrWFIDrv->strATWILC_UsrConnReq.pu8bssid, 6);				
+				}				
+				if(pstrWFIDrv->strATWILC_UsrConnReq.pu8ConnReqIEs != NULL)
+				{
+					strConnectInfo.ReqIEsLen = pstrWFIDrv->strATWILC_UsrConnReq.ConnReqIEsLen;
+					strConnectInfo.pu8ReqIEs = (ATL_Uint8*)ATL_MALLOC(pstrWFIDrv->strATWILC_UsrConnReq.ConnReqIEsLen);
+					ATL_memcpy(strConnectInfo.pu8ReqIEs,
+								  pstrWFIDrv->strATWILC_UsrConnReq.pu8ConnReqIEs,
+								  pstrWFIDrv->strATWILC_UsrConnReq.ConnReqIEsLen);
+				}					
+				pstrWFIDrv->strATWILC_UsrConnReq.pfUserConnectResult(CONN_DISCONN_EVENT_CONN_RESP,
+													&strConnectInfo,
+													MAC_DISCONNECTED,
+													NULL,
+													pstrWFIDrv->strATWILC_UsrConnReq.u32UserConnectPvoid);
+
+				/* Deallocation */
+				if(strConnectInfo.pu8ReqIEs != NULL)
+				{
+					ATL_FREE(strConnectInfo.pu8ReqIEs);
+					strConnectInfo.pu8ReqIEs = NULL;
+				}				
+			}
+			else if(pstrWFIDrv->enuHostIFstate == HOST_IF_CONNECTED)
+			{
+				pstrWFIDrv->strATWILC_UsrConnReq.pfUserConnectResult(CONN_DISCONN_EVENT_DISCONN_NOTIF,
+													NULL,
+													0,
+													&strDisconnectNotifInfo,
+													pstrWFIDrv->strATWILC_UsrConnReq.u32UserConnectPvoid);
+			}
 		}
 		else
 		{
@@ -4933,7 +4967,7 @@ static void hostIFthread(void* pvArg)
 				/*Allow chip sleep, only if both interfaces are not connected*/
 				if(!linux_wlan_get_num_conn_ifcs())
 				{
-					chip_sleep_manually(INFINITE_SLEEP_TIME);
+					chip_sleep_manually(INFINITE_SLEEP_TIME,PWR_DEV_SRC_WIFI);
 				}
 				
 				Handle_ScanDone(strHostIFmsg.drvHandler,SCAN_EVENT_DONE);	

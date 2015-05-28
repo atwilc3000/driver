@@ -1383,7 +1383,7 @@ ATL_Sint32 host_int_set_operation_mode(ATWILC_WFIDrvHandle hWFIDrv, ATL_Uint32 u
 ATL_Sint32 host_int_change_bt_coex_mode(ATWILC_WFIDrvHandle hWFIDrv,ATL_Uint8 u8BtCoexMode);
 #endif
 
-static ATL_Sint32 Handle_ScanDone(void* drvHandler,tenuScanEvent enuEvent);
+ATL_Sint32 Handle_ScanDone(void* drvHandler,tenuScanEvent enuEvent);
 
 static int host_int_addBASession(ATWILC_WFIDrvHandle hWFIDrv, char* pBSSID,char TID,short int BufferSize,
 	short int SessionTimeout,void * drvHandler);

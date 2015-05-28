@@ -97,11 +97,8 @@ typedef struct {
 		struct {
 			int (*sdio_cmd52)(sdio_cmd52_t *);
 			int (*sdio_cmd53)(sdio_cmd53_t *);
-			int (*sdio_set_max_speed)(void);
-			int (*sdio_set_default_speed)(void);
 		} sdio;
 		struct {
-			int (*spi_max_speed)(void);
 			int (*spi_tx)(uint8_t *, uint32_t);
 			int (*spi_rx)(uint8_t *, uint32_t);
 			int (*spi_trx)(uint8_t *, uint8_t *, uint32_t);
@@ -143,8 +140,6 @@ typedef struct {
 	int (*hif_block_tx_ext)(uint32_t, uint8_t *, uint32_t);	
 	int (*hif_block_rx_ext)(uint32_t, uint8_t *, uint32_t);	
 	int (*hif_sync_ext)(int);	
-	void (*hif_set_max_bus_speed)(void);
-	void (*hif_set_default_bus_speed)(void);
 } atwilc_hif_func_t;
 
 /*!
@@ -218,10 +213,10 @@ int at_pwr_power_down(int source);
 *	@version	1.0
 */
 
-void chip_allow_sleep(void);
-void chip_wakeup(void);
+void chip_allow_sleep(int source);
+void chip_wakeup(int source);
 
-void acquire_bus(BUS_ACQUIRE_T acquire);
+void acquire_bus(BUS_ACQUIRE_T acquire, int source);
 void release_bus(BUS_RELEASE_T release, int source);
 
 void atwilc_debug(uint32_t flag, char *fmt, ...);

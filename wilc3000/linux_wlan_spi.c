@@ -11,15 +11,6 @@
 
 #include "linux_wlan_common.h"
 
-#ifdef ATWILC_ASIC_A0
-#define MIN_SPEED 24000000
-#define MAX_SPEED 48000000
-#else /* ATWILC_ASIC_A0 */
-/* Limit clk to 6MHz on FPGA. */
-#define MIN_SPEED 6000000
-#define MAX_SPEED 6000000 
-#endif /* ATWILC_ASIC_A0 */
-
 static uint32_t SPEED = MIN_SPEED;
 
 struct spi_device* atwilc_spi_dev;
@@ -271,10 +262,3 @@ int linux_spi_write_read(unsigned char*wb, unsigned char*rb, unsigned int rlen)
 	return ret;
 }
 
-int linux_spi_set_max_speed(void)
-{
-	SPEED = MAX_SPEED;
-	
-	PRINT_ER("@@@@@@@@@@@@ change SPI speed to %d @@@@@@@@@\n", SPEED);
-	return 1;
-}

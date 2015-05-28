@@ -862,11 +862,7 @@ typedef enum {
 } WID_T;
 
 int at_wlan_init(atwilc_wlan_inp_t *inp, atwilc_wlan_oup_t *oup);
-
-void atwilc_bus_set_max_speed(void);
-void atwilc_bus_set_default_speed(void);
 uint32_t atwilc_get_chipid(uint8_t update);
-
 void atwilc_handle_isr(void);
 
 #endif

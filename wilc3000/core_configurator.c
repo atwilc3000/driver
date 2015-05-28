@@ -862,7 +862,9 @@ ATL_Sint32 ParseNetworkInfo(ATL_Uint8* pu8MsgBuffer, tstrNetworkInfo** ppstrNetw
 		u32Tsf_Lo = get_beacon_timestamp_lo(pu8msa);
 		u32Tsf_Hi = get_beacon_timestamp_hi(pu8msa);
 
-		pstrNetworkInfo->u64Tsf = u32Tsf_Lo | (u32Tsf_Hi << 32);
+		/*TicketId1023*/
+		pstrNetworkInfo->u64Tsf = u32Tsf_Hi;
+		pstrNetworkInfo->u64Tsf = ((pstrNetworkInfo->u64Tsf) << 32) | u32Tsf_Lo;
 		
 		/* Get SSID */
 		get_ssid(pu8msa, pstrNetworkInfo->au8ssid, &(pstrNetworkInfo->u8SsidLen));

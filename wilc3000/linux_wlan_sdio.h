@@ -37,7 +37,6 @@ int linux_sdio_cmd52(sdio_cmd52_t *cmd);
 int linux_sdio_cmd53(sdio_cmd53_t *cmd);
 int enable_sdio_interrupt(isr_handler_t isr_handler);
 void disable_sdio_interrupt(void);
-int linux_sdio_set_max_speed(void);
 int linux_sdio_set_default_speed(void);
 
 #endif //LINUX_WLAN_SDIO_H

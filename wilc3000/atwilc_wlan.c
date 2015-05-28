@@ -100,7 +100,7 @@ typedef struct {
 	void *rxq_wait;
 	int rxq_exit;
 
-
+	int initialized;	
 } atwilc_wlan_dev_t;
 
 static atwilc_wlan_dev_t g_wlan; 
@@ -517,6 +517,13 @@ static int atwilc_wlan_txq_add_cfg_pkt(uint8_t *buffer, uint32_t buffer_size)
 		return 0;
 		}
 
+	if(!(g_wlan.initialized))
+	{
+	PRINT_D(TX_DBG,"not_init, return from cfg_pkt\n");
+		p->os_func.os_signal(p->cfg_wait);
+		return 0;
+	}
+	
 	tqe = (struct txq_entry_t *)p->os_func.os_malloc_atomic(sizeof(struct txq_entry_t));
 	if (tqe == NULL){
 		PRINT_ER("Failed to allocate memory\n");
@@ -550,7 +557,14 @@ static int atwilc_wlan_txq_add_net_pkt(void *priv, uint8_t *buffer, uint32_t buf
 
 	if (p->quit)
 		return 0;
-
+	
+	if(!(g_wlan.initialized))
+	{
+		PRINT_D(TX_DBG,"not_init, return from net_pkt\n");
+		func(priv, 0);
+		return 0;
+	}
+	
 	tqe = (struct txq_entry_t *)p->os_func.os_malloc_atomic(sizeof(struct txq_entry_t));
 
 	if (tqe == NULL)
@@ -584,6 +598,13 @@ int atwilc_wlan_txq_add_mgmt_pkt(void *priv, uint8_t *buffer, uint32_t buffer_si
 	if (p->quit)
 		return 0;
 
+	if(!(g_wlan.initialized))
+	{
+		PRINT_D(TX_DBG,"not_init, return from mgmt_pkt\n");
+		func(priv, 0);
+		return 0;
+	}
+	
 	tqe = (struct txq_entry_t *)p->os_func.os_malloc_atomic(sizeof(struct txq_entry_t));
 
 	if (tqe == NULL)
@@ -720,11 +741,11 @@ static struct rxq_entry_t *atwilc_wlan_rxq_remove(void)
 
 
 
-void chip_sleep_manually(ATL_Uint32 u32SleepTime)
+void chip_sleep_manually(ATL_Uint32 u32SleepTime , int source)
 {
-	acquire_bus(ACQUIRE_ONLY);
+	acquire_bus(ACQUIRE_ONLY,source);
 
-	chip_allow_sleep();
+	chip_allow_sleep(source);
 
 	/* Trigger the manual sleep interrupt host_interrupt_4*/
 	g_wlan.hif_func.hif_write_reg(0x10B8, 1);
@@ -837,7 +858,7 @@ static int atwilc_wlan_handle_txq(uint32_t* pu32TxqCount)
 			PRINT_D(TX_DBG,"Mark the last entry in VMM table - number of previous entries = %d\n",i);
 			vmm_table[i] = 0x0;	/* mark the last element to 0 */
 		}
-		acquire_bus(ACQUIRE_AND_WAKEUP); //First acquire should keep the chip awake
+		acquire_bus(ACQUIRE_AND_WAKEUP,PWR_DEV_SRC_WIFI); //First acquire should keep the chip awake
 		counter = 0;
 		do {
 
@@ -858,7 +879,7 @@ static int atwilc_wlan_handle_txq(uint32_t* pu32TxqCount)
 			if(counter > 200)
 			{
 				counter = 0;
-				printk("Looping in tx ctrl , forcce quit\n");
+				printk("Looping in tx ctrl , force quit\n");
 				ret = p->hif_func.hif_write_reg(ATWILC_HOST_TX_CTRL, 0);	
 				break;
 			}
@@ -1052,7 +1073,7 @@ static int atwilc_wlan_handle_txq(uint32_t* pu32TxqCount)
 			lock the bus
 		**/
 		//PRINT_D(GENERIC_DBG,"Locking hif_lock\n");
-		acquire_bus(ACQUIRE_AND_WAKEUP);
+		acquire_bus(ACQUIRE_AND_WAKEUP,PWR_DEV_SRC_WIFI);
 
 		ret = p->hif_func.hif_clear_int_ext(ENABLE_TX_VMM);
 		if (!ret) {
@@ -1340,7 +1361,9 @@ _end_:
 				rqe->buffer_size = size;
 				PRINT_D(RX_DBG,"rxq entery Size= %d - Address = %p\n",rqe->buffer_size,rqe->buffer);
 				atwilc_wlan_rxq_add(rqe);
+				#ifndef TCP_ENHANCEMENTS
 				p->os_func.os_signal(p->rxq_wait);
+				#endif
 			}
 		} else {
 #ifndef MEMORY_STATIC
@@ -1358,7 +1381,7 @@ void atwilc_handle_isr(void)
 {
 	uint32_t int_status;
 
-	acquire_bus(ACQUIRE_AND_WAKEUP);
+	acquire_bus(ACQUIRE_AND_WAKEUP,PWR_DEV_SRC_WIFI);
 	g_wlan.hif_func.hif_read_int(&int_status);
 	
 	if(int_status & PLL_INT_EXT){
@@ -1405,7 +1428,7 @@ static int atwilc_wlan_firmware_download(const uint8_t *buffer, uint32_t buffer_
 	
 	/*TicketId1003*/
 	/* Reset the CPU before changing IRAM*/
-	acquire_bus(ACQUIRE_ONLY);
+	acquire_bus(ACQUIRE_ONLY,PWR_DEV_SRC_WIFI);
 
 	p->hif_func.hif_read_reg(ATWILC_GLB_RESET_0,&reg);
 	reg &= ~(1ul << 10);			
@@ -1427,7 +1450,7 @@ static int atwilc_wlan_firmware_download(const uint8_t *buffer, uint32_t buffer_
 		addr = BYTE_SWAP(addr);
 		size = BYTE_SWAP(size);
 #endif
-		acquire_bus(ACQUIRE_ONLY);
+		acquire_bus(ACQUIRE_ONLY,PWR_DEV_SRC_WIFI);
 		offset += 8;		
 		while(((int)size) && (offset < buffer_size)) {
 			if(size <= blksz) {
@@ -1574,7 +1597,7 @@ static int atwilc_wlan_start(void)
 		Set the host interface
 	**/
 #ifdef OLD_FPGA_BITFILE
-	acquire_bus(ACQUIRE_ONLY);
+	acquire_bus(ACQUIRE_ONLY,PWR_DEV_SRC_WIFI);
 	ret = p->hif_func.hif_read_reg(ATWILC_VMM_CORE_CTL, &reg);
 	if (!ret) {
 		atwilc_debug(N_ERR, "[atwilc start]: fail read reg vmm_core_ctl...\n");
@@ -1595,7 +1618,7 @@ static int atwilc_wlan_start(void)
 	} else if (p->io_type == HIF_SPI) {
 		reg = 1;
 	}
-	acquire_bus(ACQUIRE_ONLY);
+	acquire_bus(ACQUIRE_ONLY,PWR_DEV_SRC_WIFI);
 	ret = p->hif_func.hif_write_reg(ATWILC_VMM_CORE_CFG, reg);
 	if (!ret) {
 		atwilc_debug(N_ERR, "[atwilc start]: fail write reg vmm_core_cfg...\n");
@@ -1680,6 +1703,18 @@ static int atwilc_wlan_start(void)
 	reg |= (1ul << 10);			
 	ret = p->hif_func.hif_write_reg(ATWILC_GLB_RESET_0, reg);	
 	p->hif_func.hif_read_reg(ATWILC_GLB_RESET_0,&reg);
+
+	if(ret >= 0)
+	{
+		/* initializaed successfully */
+		g_wlan.initialized = 1;
+	}
+	else
+	{
+		/* not successfully initializaed */
+		g_wlan.initialized = 0;
+	}
+	
 	release_bus(RELEASE_ONLY, PWR_DEV_SRC_WIFI);
 
 	return (ret<0)?ret:0;
@@ -1689,7 +1724,7 @@ void atwilc_wlan_global_reset(void)
 {
 
 	atwilc_wlan_dev_t *p = (atwilc_wlan_dev_t *)&g_wlan;
-	acquire_bus(ACQUIRE_AND_WAKEUP);
+	acquire_bus(ACQUIRE_AND_WAKEUP,PWR_DEV_SRC_WIFI);
 	p->hif_func.hif_write_reg(ATWILC_GLB_RESET_0,0x0);
 	release_bus(RELEASE_ONLY, PWR_DEV_SRC_WIFI);	
 }
@@ -1702,7 +1737,7 @@ static int atwilc_wlan_stop(void)
 	/**
 		TODO: stop the firmware, need a re-download
 	**/
-	acquire_bus(ACQUIRE_AND_WAKEUP);
+	acquire_bus(ACQUIRE_AND_WAKEUP,PWR_DEV_SRC_WIFI);
 	
 	/* Adjust coexistence module. This should be done from the FW in the future*/
 	ret = p->hif_func.hif_read_reg(rCOEXIST_CTL, &reg);
@@ -1789,7 +1824,7 @@ static int atwilc_wlan_stop(void)
 /* This was add at Bug 4595 to reset the chip while maintaining the bus state */
 /******************************************************************************/
 	/* bit1 isn't in WILC3000's registers*/
-	reg = ((1<<0)|(1<<2)|(1<<3)|(1<<8)|(1<<9)|(1<<26)|(1<<29)|(1<<30)|(1<<31)); 		/**/
+	reg = ((1<<0)|(1<<2)|(1<<3)|(1<<8)|(1<<9)|(1<<20)|(1<<26)|(1<<29)|(1<<30)|(1<<31)); 		/**/
 																			/**/
 	ret = p->hif_func.hif_write_reg(ATWILC_GLB_RESET_0, reg);					/**/
 	reg = ~(1 << 10);            											/**/
@@ -1912,7 +1947,7 @@ static void atwilc_wlan_cleanup(void)
 	}
 
 
-	acquire_bus(ACQUIRE_AND_WAKEUP);
+	acquire_bus(ACQUIRE_AND_WAKEUP,PWR_DEV_SRC_WIFI);
 
 	
 	ret = p->hif_func.hif_read_reg(ATWILC_GP_REG_0,&reg); 
@@ -2056,24 +2091,13 @@ static int atwilc_wlan_cfg_get_val(uint32_t wid, uint8_t *buffer, uint32_t buffe
 	return ret;
 }
 
-void atwilc_bus_set_max_speed(void){
-	
-	/* Increase bus speed to max possible.  */
-	g_wlan.hif_func.hif_set_max_bus_speed();
-}
-
-void atwilc_bus_set_default_speed(void){
-	
-	/* Restore bus speed to default.  */
-	g_wlan.hif_func.hif_set_default_bus_speed();		
-}
 uint32_t init_chip(void)
 {
 	uint32_t chipid;
 	uint32_t reg,ret=0;
 
 
-	acquire_bus(ACQUIRE_ONLY);
+	acquire_bus(ACQUIRE_ONLY,PWR_DEV_SRC_WIFI);
 	chipid = atwilc_get_chipid(ATL_TRUE);
 
 
@@ -2093,13 +2117,13 @@ uint32_t init_chip(void)
 		ret = g_wlan.hif_func.hif_read_reg(0x1118, &reg);
 		if (!ret) {
 			atwilc_debug(N_ERR, "[atwilc start]: fail read reg 0x1118 ...\n");
-			return ret;
+			goto end;
 		}
 		reg |= (1 << 0);
 		ret = g_wlan.hif_func.hif_write_reg(0x1118, reg);
 		if (!ret) {
 			atwilc_debug(N_ERR, "[atwilc start]: fail write reg 0x1118 ...\n");
-			return ret;
+			goto end;
 		}
 
 #ifdef DOWNLOAD_BT_FW	
@@ -2111,13 +2135,13 @@ uint32_t init_chip(void)
 		ret = g_wlan.hif_func.hif_read_reg(0x3b0090, &reg);
 		if (!ret) {
 			atwilc_debug(N_ERR, "[atwilc start]: fail read reg 0x3b0090 ...\n");
-			return ret;
+			goto end;
 		}
 		reg |= (1 << 0);
 		ret = g_wlan.hif_func.hif_write_reg(0x3b0090, reg);
 		if (!ret) {
 			atwilc_debug(N_ERR, "[atwilc start]: fail write reg 0x3b0090 ...\n");
-			return ret;
+			goto end;
 		}
 #endif
 		/**
@@ -2127,7 +2151,7 @@ uint32_t init_chip(void)
 		ret = g_wlan.hif_func.hif_write_reg(0xc0000, 0x71);
 		if (!ret) {
 			atwilc_debug(N_ERR, "[atwilc start]: fail write reg 0xc0000 ...\n");
-			return ret;
+			goto end;
 
 		}
 		/**
@@ -2137,7 +2161,7 @@ uint32_t init_chip(void)
 		ret = g_wlan.hif_func.hif_write_reg(0x4f0000, 0x71);
 		if (!ret) {
 			atwilc_debug(N_ERR, "[atwilc start]: fail write reg 0x4f0000 ...\n");
-			return ret;
+			goto end;
 
 		}
 
@@ -2171,7 +2195,7 @@ uint32_t init_chip(void)
 	#endif
 
 
-
+end:
 	release_bus(RELEASE_ONLY, PWR_DEV_SRC_WIFI);
 
 	return ret;
@@ -2202,7 +2226,7 @@ uint8_t core_11b_ready(void)
 {	
 	uint32_t reg_val;
 
-	acquire_bus(ACQUIRE_ONLY);	
+	acquire_bus(ACQUIRE_ONLY,PWR_DEV_SRC_WIFI);	
 	g_wlan.hif_func.hif_write_reg(0x16082c,1);
 	g_wlan.hif_func.hif_write_reg(0x161600,0x90);
 	g_wlan.hif_func.hif_read_reg(0x161600,&reg_val);
