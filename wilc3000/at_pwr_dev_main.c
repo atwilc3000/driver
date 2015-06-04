@@ -1187,6 +1187,9 @@ static int atwilc_bt_start(void)
 	return (ret<0)?ret:0;
 }
 
+module_init(at_pwr_dev_init);
+module_exit(at_pwr_dev_deinit);
+
 EXPORT_SYMBOL(linux_wlan_init_spin_lock);
 EXPORT_SYMBOL(genuChipPSstate);
 EXPORT_SYMBOL(linux_wlan_atomic_msleep);

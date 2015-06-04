@@ -2972,10 +2972,6 @@ int atwilc_netdev_init(void){
 /*The 1st function called after module inserted*/
 static int __init init_atwilc_driver(void){
 	int ret = 0;
-	if(at_pwr_dev_init() != 0)
-	{
-		ATL_PRINTF("Failed to create bluetooth power device\n");
-	}
 
 #if defined (ATWILC_DEBUGFS)
 	if(atwilc_debugfs_init() < 0) {	
@@ -3090,7 +3086,6 @@ static void __exit exit_atwilc_driver(void)
 	#if defined (ATWILC_DEBUGFS)
 		atwilc_debugfs_remove();
 	#endif
-	at_pwr_dev_deinit();
 	at_pwr_power_down(PWR_DEV_SRC_WIFI);
 }
 module_exit(exit_atwilc_driver);
