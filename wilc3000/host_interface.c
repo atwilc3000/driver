@@ -977,7 +977,8 @@ static ATL_Sint32 Handle_SetMacAddress(void * drvHandler, tstrHostIfSetMacAddres
 	strWID.enuWIDtype= WID_STR;
 	strWID.ps8WidVal = mac_buf;
 	strWID.s32ValueSize = ETH_ALEN;
-PRINT_D(GENERIC_DBG,"mac addr = :%x:%x:%x:%x:%x:%x\n",strWID.ps8WidVal[0], strWID.ps8WidVal[1], strWID.ps8WidVal[2], strWID.ps8WidVal[3], strWID.ps8WidVal[4], strWID.ps8WidVal[5]);
+	
+	PRINT_D(HOSTINF_DBG,"mac addr = :%x:%x:%x:%x:%x:%x\n",strWID.ps8WidVal[0], strWID.ps8WidVal[1], strWID.ps8WidVal[2], strWID.ps8WidVal[3], strWID.ps8WidVal[4], strWID.ps8WidVal[5]);
 	/*Sending Cfg*/
 	s32Error = SendConfigPkt(SET_CFG, &strWID, 1, ATL_TRUE,(ATL_Uint32)pstrWFIDrv);
 	if(s32Error)
@@ -1038,18 +1039,31 @@ static ATL_Sint32 Handle_BTCoexModeChange(void * drvHandler, tstrHostIFBTCoexMod
 {
 
 	ATL_Sint32 s32Error = ATL_SUCCESS;
-	tstrWID	strWID;
+	tstrWID	strWIDList[2];
+	ATL_Uint32 u32WidsCount = 0;
+	ATL_Uint8 u8CoexNullFramesMode = COEX_NULL_FRAMES_OFF;
 	tstrATWILC_WFIDrv * pstrWFIDrv = (tstrATWILC_WFIDrv *)drvHandler;
 
 	/*prepare configuration packet*/
-	strWID.u16WIDid = (ATL_Uint16)WID_BT_COEX_MODE;
-	strWID.enuWIDtype= WID_CHAR;
-	strWID.ps8WidVal = (ATL_Char*)&(pstrHostIFBTCoexMode->u8BTCoexMode);
-	strWID.s32ValueSize = sizeof(ATL_Char);
-
+	strWIDList[u32WidsCount].u16WIDid = (ATL_Uint16)WID_BT_COEX_MODE;
+	strWIDList[u32WidsCount].enuWIDtype= WID_CHAR;
+	strWIDList[u32WidsCount].ps8WidVal = (ATL_Char*)&(pstrHostIFBTCoexMode->u8BTCoexMode);
+	strWIDList[u32WidsCount].s32ValueSize = sizeof(ATL_Char);
+	u32WidsCount++;
 	PRINT_D(HOSTINF_DBG,"[COEX] [DRV] Changing BT mode: %x\n",pstrHostIFBTCoexMode->u8BTCoexMode);
+
+	/*TicketId1115*/
+	if(pstrHostIFBTCoexMode->u8BTCoexMode == COEX_ON)
+		u8CoexNullFramesMode = COEX_NULL_FRAMES_ON;
+	/*prepare configuration packet*/
+	strWIDList[u32WidsCount].u16WIDid = (ATL_Uint16)WID_COEX_NULL_FRAMES_MODE;
+	strWIDList[u32WidsCount].enuWIDtype= WID_CHAR;
+	strWIDList[u32WidsCount].ps8WidVal = (ATL_Char*)&(u8CoexNullFramesMode);
+	strWIDList[u32WidsCount].s32ValueSize = sizeof(ATL_Char);
+	u32WidsCount++;
+	
 	/*Sending Cfg*/
-	s32Error = SendConfigPkt(SET_CFG, &strWID, 1, ATL_TRUE, (ATL_Uint32)pstrWFIDrv);
+	s32Error = SendConfigPkt(SET_CFG, strWIDList, u32WidsCount, ATL_TRUE, (ATL_Uint32)pstrWFIDrv);
 	if(s32Error)
 	{
 		PRINT_ER("[COEX] [DRV] Changing BT mode failed\n");
@@ -5999,7 +6013,7 @@ ATL_Sint32 host_int_set_MacAddress(ATWILC_WFIDrvHandle hWFIDrv,ATL_Uint8* pu8Mac
 	ATL_Sint32 s32Error = ATL_SUCCESS;
 	tstrHostIFmsg strHostIFmsg;
 
-	PRINT_D(GENERIC_DBG,"mac addr = %x:%x:%x\n",pu8MacAddress[0], pu8MacAddress[1], pu8MacAddress[2]);
+	PRINT_D(HOSTINF_DBG,"mac addr = %x:%x:%x\n",pu8MacAddress[0], pu8MacAddress[1], pu8MacAddress[2]);
 
 	/* prepare setting mac address message */	
 	ATL_memset(&strHostIFmsg, 0, sizeof(tstrHostIFmsg));
@@ -6586,7 +6600,7 @@ ATL_Sint32 host_int_set_mac_chnl_num(ATWILC_WFIDrvHandle hWFIDrv,ATL_Uint8 u8ChN
 }
 
 #ifdef ATWILC_BT_COEXISTENCE
-ATL_Sint32 host_int_change_bt_coex_mode(ATWILC_WFIDrvHandle hWFIDrv,ATL_Uint8 u8BtCoexMode)
+ATL_Sint32 host_int_change_bt_coex_mode(ATWILC_WFIDrvHandle hWFIDrv,tenuCoexMode u8BtCoexMode)
 {
 	ATL_Sint32 s32Error = ATL_SUCCESS;
 	tstrATWILC_WFIDrv * pstrWFIDrv = (tstrATWILC_WFIDrv *)hWFIDrv;
@@ -6614,7 +6628,7 @@ ATL_Sint32 host_int_change_bt_coex_mode(ATWILC_WFIDrvHandle hWFIDrv,ATL_Uint8 u8
 
 	return s32Error;
 }
-#endif
+#endif /*ATWILC_BT_COEXISTENCE*/
 
 ATL_Sint32 host_int_wait_msg_queue_idle(void)
 {

@@ -453,6 +453,17 @@ typedef enum {
     /*  Configuration :   Don't Reset	Reset	No Request                       */
     /*  Values to set :       0                   1			2                          */
     /*  --------------------------------------------------------------       */
+
+#ifdef ATWILC_BT_COEXISTENCE
+	/*TicketId1115*/
+    /*  Set coex null frames transmission mode                                                        */
+    /*  --------------------------------------------------------------       */
+    /*  Configuration :   Enable	Disable                       */
+    /*  Values to set :       1			0			*/
+    /*  --------------------------------------------------------------       */
+	WID_COEX_NULL_FRAMES_MODE               = 0x0013,
+#endif  
+
 	WID_RESET                          = 0x0012,
 
     /*  Broadcast SSID Option: Setting this will adhere to "" SSID element   */

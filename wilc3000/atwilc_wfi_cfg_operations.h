@@ -131,5 +131,5 @@ struct net_device * ATWILC_WFI_init_mon_interface(char *name, struct net_device 
 #define DEFAULT_LINK_SPEED 72
 extern void Enable_TCP_ACK_Filter(ATL_Bool value);
 #endif
-
+int	ATWILC_WFI_get_u8SuspendOnEvent_value(void);
 #endif

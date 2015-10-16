@@ -2,6 +2,7 @@
 
 #include "linux_wlan_common.h"
 #include "linux_os_wrapper.h"
+#include "host_interface.h"
 //#include "atwilc_wlan_if.h"
 //#include "atwilc_wfi_netdevice.h"
 //#include "atwilc_wlan.h"
@@ -48,6 +49,10 @@ unsigned int int_clrd;
 #endif
 #define rCOEXIST_CTL 			(0x161E00)
 #define rGLOBAL_MODE_CONTROL	(0x1614)
+#define rPWR_SEQ_MISC_CTRL		(0x3008)
+#define rCOE_AUTO_PS_ON_NULL_PKT 	(0x160468)
+#define rCOE_AUTO_PS_OFF_NULL_PKT (0x16046C)
+#define rPA_CONTROL				(0x9804)
 
 /*****************************************************************************/
 /*								Externs										 */
@@ -72,6 +77,9 @@ typedef struct {
 	struct mutex hif_cs;
 #ifdef DOWNLOAD_BT_FW_ONCE
 	uint8_t is_bt_fw_ready;
+#endif
+#ifdef ATWILC_BT_COEXISTENCE
+	tATWILCpfChangeCoexMode pfChangeCoexMode;
 #endif
 }pwr_dev_t;
 
@@ -430,6 +438,14 @@ void atwilc_debug(uint32_t flag, char *fmt, ...)
 	return;
 }
 
+/*TicketId883*/
+#ifdef ATWILC_BT_COEXISTENCE
+void atwilc_set_pf_change_coex_mode(tATWILCpfChangeCoexMode pfChangeCoexMode)
+{
+	pwr_dev.pfChangeCoexMode = pfChangeCoexMode;
+}
+#endif
+
 /*****************************************************************************/
 /*								Private Functions							 */
 /*****************************************************************************/
@@ -480,11 +496,108 @@ static ssize_t pwr_dev_write(struct file *f, const char __user *buff, size_t len
 
 static int cmd_handle_bt_power_up(int source)
 {
+	int ret;
+	uint32_t reg;
+	
 	PRINT_D(PWRDEV_DBG, "AT PWR: bt_power_up\n");
 	at_pwr_power_up(PWR_DEV_SRC_BT);
 	at_pwr_register_bus(PWR_DEV_SRC_BT);
+
+	/*TicketId883*/
+	/*Set BT bit in global mode reg*/
+	if(pwr_dev.bus_registered[PWR_DEV_SRC_BT] == true)
+	{
+		acquire_bus(ACQUIRE_AND_WAKEUP,PWR_DEV_SRC_BT);
+		
+		ret = pwr_dev.hif_func.hif_read_reg(rGLOBAL_MODE_CONTROL, &reg);
+		if (!ret) {
+			PRINT_ER("[atwilc start]: fail read reg %x ...\n", rGLOBAL_MODE_CONTROL);
+			release_bus(RELEASE_ALLOW_SLEEP, PWR_DEV_SRC_BT);
+			return ret;
+		}
+		reg |= BIT1;
+		ret = pwr_dev.hif_func.hif_write_reg(rGLOBAL_MODE_CONTROL, reg);
+		if (!ret) {
+			PRINT_ER("[atwilc start]: fail write reg %x ...\n", rGLOBAL_MODE_CONTROL);
+			release_bus(RELEASE_ALLOW_SLEEP, PWR_DEV_SRC_BT);
+			return ret;
+		}
+
+		release_bus(RELEASE_ALLOW_SLEEP, PWR_DEV_SRC_BT);
+	}
+
+	/*TicketId1092*/
+	/*If WiFi is off, force BT*/
+	if(pwr_dev.power_status[PWR_DEV_SRC_WIFI] == false)
+	{
+		if(pwr_dev.bus_registered[PWR_DEV_SRC_BT] == true)
+		{		
+			acquire_bus(ACQUIRE_AND_WAKEUP,PWR_DEV_SRC_BT);
+		
+			ret = pwr_dev.hif_func.hif_read_reg(rCOEXIST_CTL, &reg);
+			if (!ret) {
+				PRINT_ER("[atwilc start]: fail read reg %x ...\n", rCOEXIST_CTL);
+				release_bus(RELEASE_ALLOW_SLEEP, PWR_DEV_SRC_BT);
+				return ret;
+			}
+			/*Force BT*/
+			reg |= BIT0 | BIT9;
+			reg &= ~BIT11;
+			ret = pwr_dev.hif_func.hif_write_reg(rCOEXIST_CTL, reg);
+			if (!ret) {
+				PRINT_ER( "[atwilc start]: fail write reg %x ...\n", rCOEXIST_CTL);
+				release_bus(RELEASE_ALLOW_SLEEP, PWR_DEV_SRC_BT);
+				return ret;
+			}
+
+			/*TicketId1115*/
+			/*Disable awake coex null frames*/
+			ret = pwr_dev.hif_func.hif_read_reg(rCOE_AUTO_PS_ON_NULL_PKT, &reg);
+			if (!ret) {
+				PRINT_ER("[atwilc start]: fail read reg %x ...\n", rCOE_AUTO_PS_ON_NULL_PKT);
+				release_bus(RELEASE_ALLOW_SLEEP, PWR_DEV_SRC_BT);
+				return ret;
+			}
+			reg &= ~BIT30;
+			ret = pwr_dev.hif_func.hif_write_reg(rCOE_AUTO_PS_ON_NULL_PKT, reg);
+			if (!ret) {
+				PRINT_ER( "[atwilc start]: fail write reg %x ...\n", rCOE_AUTO_PS_ON_NULL_PKT);
+				release_bus(RELEASE_ALLOW_SLEEP, PWR_DEV_SRC_BT);
+				return ret;
+			}
+
+			/*TicketId1115*/
+			/*Disable doze coex null frames*/
+			ret = pwr_dev.hif_func.hif_read_reg(rCOE_AUTO_PS_OFF_NULL_PKT, &reg);
+			if (!ret) {
+				PRINT_ER("[atwilc start]: fail read reg %x ...\n", rCOE_AUTO_PS_OFF_NULL_PKT);
+				release_bus(RELEASE_ALLOW_SLEEP, PWR_DEV_SRC_BT);
+				return ret;
+			}
+			reg &= ~BIT30;
+			ret = pwr_dev.hif_func.hif_write_reg(rCOE_AUTO_PS_OFF_NULL_PKT, reg);
+			if (!ret) {
+				PRINT_ER( "[atwilc start]: fail write reg %x ...\n", rCOE_AUTO_PS_OFF_NULL_PKT);
+				release_bus(RELEASE_ALLOW_SLEEP, PWR_DEV_SRC_BT);
+				return ret;
+			}
+			
+			release_bus(RELEASE_ALLOW_SLEEP, PWR_DEV_SRC_BT);	
+		}
+	}
+	else
+	{
+		/*TicketId883*/
+		/*If WiFi is on, send config packet to change coex mode and coex null frames transmission*/
+		#ifdef ATWILC_BT_COEXISTENCE
+		if(pwr_dev.pfChangeCoexMode)
+		{
+			pwr_dev.pfChangeCoexMode(COEX_ON);
+		}
+		#endif /*ATWILC_BT_COEXISTENCE*/
+	}
+	
 	return 0;
-//	atwilc_bus_read
 }
 
 static int cmd_handle_bt_power_down(int source)
@@ -509,14 +622,7 @@ static int cmd_handle_bt_power_down(int source)
 		ret = pwr_dev.hif_func.hif_read_reg(rGLOBAL_MODE_CONTROL, &reg);
 		if (!ret) {
 			PRINT_ER("[atwilc start]: fail read reg %x ...\n", rGLOBAL_MODE_CONTROL);
-			if(genuChipPSstateFromWifi == CHIP_SLEEPING_AUTO)
-			{
-				release_bus(RELEASE_ALLOW_SLEEP, PWR_DEV_SRC_BT);
-			}
-			else
-			{
-				release_bus(RELEASE_ONLY, PWR_DEV_SRC_BT);
-			}
+			release_bus(RELEASE_ALLOW_SLEEP, PWR_DEV_SRC_BT);
 			return ret;
 		}
 		// Clear BT mode
@@ -524,28 +630,14 @@ static int cmd_handle_bt_power_down(int source)
 		ret = pwr_dev.hif_func.hif_write_reg(rGLOBAL_MODE_CONTROL, reg);
 		if (!ret) {
 			PRINT_ER("[atwilc start]: fail write reg %x ...\n", rGLOBAL_MODE_CONTROL);
-			if(genuChipPSstateFromWifi == CHIP_SLEEPING_AUTO)
-			{
-				release_bus(RELEASE_ALLOW_SLEEP, PWR_DEV_SRC_BT);
-			}
-			else
-			{
-				release_bus(RELEASE_ONLY, PWR_DEV_SRC_BT);
-			}
+			release_bus(RELEASE_ALLOW_SLEEP, PWR_DEV_SRC_BT);
 			return ret;
 		}
 		
 		ret = pwr_dev.hif_func.hif_read_reg(rCOEXIST_CTL, &reg);
 		if (!ret) {
 			PRINT_ER("[atwilc start]: fail read reg %x ...\n", rCOEXIST_CTL);
-			if(genuChipPSstateFromWifi == CHIP_SLEEPING_AUTO)
-			{
-				release_bus(RELEASE_ALLOW_SLEEP, PWR_DEV_SRC_BT);
-			}
-			else
-			{
-				release_bus(RELEASE_ONLY, PWR_DEV_SRC_BT);
-			}
+			release_bus(RELEASE_ALLOW_SLEEP, PWR_DEV_SRC_BT);
 			return ret;
 		}
 		// Stop forcing BT and force Wifi
@@ -554,26 +646,58 @@ static int cmd_handle_bt_power_down(int source)
 		ret = pwr_dev.hif_func.hif_write_reg(rCOEXIST_CTL, reg);
 		if (!ret) {
 			PRINT_ER( "[atwilc start]: fail write reg %x ...\n", rCOEXIST_CTL);
-			if(genuChipPSstateFromWifi == CHIP_SLEEPING_AUTO)
-			{
-				release_bus(RELEASE_ALLOW_SLEEP, PWR_DEV_SRC_BT);
-			}
-			else
-			{
-				release_bus(RELEASE_ONLY, PWR_DEV_SRC_BT);
-			}
+			release_bus(RELEASE_ALLOW_SLEEP, PWR_DEV_SRC_BT);
+			return ret;
+		}
+
+		/*TicketId1115*/
+		/*Disable awake coex null frames*/
+		ret = pwr_dev.hif_func.hif_read_reg(rCOE_AUTO_PS_ON_NULL_PKT, &reg);
+		if (!ret) {
+			PRINT_ER("[atwilc start]: fail read reg %x ...\n", rCOE_AUTO_PS_ON_NULL_PKT);
+			release_bus(RELEASE_ALLOW_SLEEP, PWR_DEV_SRC_BT);
+			return ret;
+		}
+		reg &= ~BIT30;
+		ret = pwr_dev.hif_func.hif_write_reg(rCOE_AUTO_PS_ON_NULL_PKT, reg);
+		if (!ret) {
+			PRINT_ER( "[atwilc start]: fail write reg %x ...\n", rCOE_AUTO_PS_ON_NULL_PKT);
+			release_bus(RELEASE_ALLOW_SLEEP, PWR_DEV_SRC_BT);
+			return ret;
+		}
+
+		/*TicketId1115*/
+		/*Disable doze coex null frames*/
+		ret = pwr_dev.hif_func.hif_read_reg(rCOE_AUTO_PS_OFF_NULL_PKT, &reg);
+		if (!ret) {
+			PRINT_ER("[atwilc start]: fail read reg %x ...\n", rCOE_AUTO_PS_OFF_NULL_PKT);
+			release_bus(RELEASE_ALLOW_SLEEP, PWR_DEV_SRC_BT);
+			return ret;
+		}
+		reg &= ~BIT30;
+		ret = pwr_dev.hif_func.hif_write_reg(rCOE_AUTO_PS_OFF_NULL_PKT, reg);
+		if (!ret) {
+			PRINT_ER( "[atwilc start]: fail write reg %x ...\n", rCOE_AUTO_PS_OFF_NULL_PKT);
+			release_bus(RELEASE_ALLOW_SLEEP, PWR_DEV_SRC_BT);
 			return ret;
 		}
 		
-		if(genuChipPSstateFromWifi == CHIP_SLEEPING_AUTO)
-		{
+		// Disable BT wakeup
+		ret = pwr_dev.hif_func.hif_read_reg(rPWR_SEQ_MISC_CTRL, &reg);
+		if (!ret) {
+			PRINT_ER( "[atwilc start]: fail write reg %x ...\n", rCOEXIST_CTL);
 			release_bus(RELEASE_ALLOW_SLEEP, PWR_DEV_SRC_BT);
+			return ret;
 		}
-		else
-		{
-			release_bus(RELEASE_ONLY, PWR_DEV_SRC_BT);
+		reg &= ~ BIT29;
+		ret = pwr_dev.hif_func.hif_write_reg(rPWR_SEQ_MISC_CTRL, reg);
+		if (!ret) {
+			PRINT_ER( "[atwilc start]: fail write reg %x ...\n", rCOEXIST_CTL);
+			release_bus(RELEASE_ALLOW_SLEEP, PWR_DEV_SRC_BT);
+			return ret;
 		}
-		
+
+		release_bus(RELEASE_ALLOW_SLEEP, PWR_DEV_SRC_BT);		
 	}
 	
 	at_pwr_unregister_bus(PWR_DEV_SRC_BT);
@@ -585,26 +709,30 @@ static int cmd_handle_bt_power_down(int source)
 static int cmd_handle_bt_download_fw(int source)
 {
 	PRINT_D(PWRDEV_DBG, "AT PWR: bt_download_fw\n");
-	
+
 #ifdef DOWNLOAD_BT_FW_ONCE
 	linux_wlan_lock_mutex(&pwr_dev.cs);
-	if(pwr_dev.is_bt_fw_ready == true)
+	if(pwr_dev.is_bt_fw_ready == false)
+	{	
+		linux_wlan_unlock_mutex(&pwr_dev.cs);
+#endif
+	
+		if(atwilc_bt_firmware_download() != 0)
+		{
+			PRINT_ER("Failed to download BT FW");
+
+			at_pwr_unregister_bus(PWR_DEV_SRC_BT);
+			
+			return -1;
+		}
+#ifdef DOWNLOAD_BT_FW_ONCE
+	}
+	else
 	{
 		PRINT_WRN(PWRDEV_DBG,"BT FW already downloaded. Skip!\n");
 		linux_wlan_unlock_mutex(&pwr_dev.cs);
-		return 0;
 	}
-	linux_wlan_unlock_mutex(&pwr_dev.cs);
 #endif
-
-	if(atwilc_bt_firmware_download() != 0)
-	{
-		PRINT_ER("Failed to download BT FW");
-
-		at_pwr_unregister_bus(PWR_DEV_SRC_BT);
-		
-		return -1;
-	}
 
 	if(atwilc_bt_start() != 0)
 	{
@@ -620,7 +748,7 @@ static int cmd_handle_bt_download_fw(int source)
 	pwr_dev.is_bt_fw_ready = true;
 	linux_wlan_unlock_mutex(&pwr_dev.cs);
 #endif
-
+	
 	at_pwr_unregister_bus(PWR_DEV_SRC_BT);
 
 	return 0;
@@ -637,8 +765,7 @@ static int cmd_handle_bt_fw_chip_wake_up(int source)
 
 	
 static int cmd_handle_bt_fw_chip_allow_sleep(int source)
-{
-	
+{	
 	chip_allow_sleep(source);
 	return 0;
 }
@@ -793,12 +920,6 @@ void release_bus(BUS_RELEASE_T release, int source)
 {
 	if(release == RELEASE_ALLOW_SLEEP)
 		chip_allow_sleep(source);
-
-	
-	if(source == PWR_DEV_SRC_WIFI)
-	{
-		genuChipPSstateFromWifi = genuChipPSstate;
-	}
 	
 	//g_wlan.os_func.os_leave_cs(g_wlan.hif_lock);
 	linux_wlan_unlock_mutex(&pwr_dev.hif_cs);
@@ -835,6 +956,7 @@ void release_bus(BUS_RELEASE_T release, int source)
  #define _linux_wlan_device_detection()         sw_mci_rescan_card(ATWILC_SDIO_CARD_ID,1)
  #define _linux_wlan_device_removal()           sw_mci_rescan_card(ATWILC_SDIO_CARD_ID,0)
  #elif defined(PLAT_SAMA5D4)
+
  #define _linux_wlan_device_detection()		{}
  #define _linux_wlan_device_removal()		{}
  #define _linux_wlan_device_power_on()		{}
@@ -933,7 +1055,7 @@ int at_pwr_power_up(int source)
 	linux_wlan_unlock_mutex(&pwr_dev.cs);
 
 	return 0;
-}
+}
 
 static int atwilc_bt_firmware_download(void)
 {
@@ -974,15 +1096,7 @@ static int atwilc_bt_firmware_download(void)
 	ret = pwr_dev.hif_func.hif_write_reg(0x4f0000, 0x71);
 	if (!ret) {
 		PRINT_ER( "[atwilc start]: fail write reg 0x4f0000 ...\n");
-		if(genuChipPSstateFromWifi == CHIP_SLEEPING_AUTO)
-		{
-			release_bus(RELEASE_ALLOW_SLEEP, PWR_DEV_SRC_BT);
-		}
-		else
-		{
-			release_bus(RELEASE_ONLY, PWR_DEV_SRC_BT);
-		}
-		
+		release_bus(RELEASE_ALLOW_SLEEP, PWR_DEV_SRC_BT);		
 		goto _fail_1;
 	}
 
@@ -994,28 +1108,14 @@ static int atwilc_bt_firmware_download(void)
 	ret = pwr_dev.hif_func.hif_read_reg(0x3b0090, &reg);
 	if (!ret) {
 		PRINT_ER( "[atwilc start]: fail read reg 0x3b0090 ...\n");
-		if(genuChipPSstateFromWifi == CHIP_SLEEPING_AUTO)
-		{
-			release_bus(RELEASE_ALLOW_SLEEP, PWR_DEV_SRC_BT);
-		}
-		else
-		{
-			release_bus(RELEASE_ONLY, PWR_DEV_SRC_BT);
-		}
+		release_bus(RELEASE_ALLOW_SLEEP, PWR_DEV_SRC_BT);
 		goto _fail_1;
 	}
 	reg |= (1 << 0);
 	ret = pwr_dev.hif_func.hif_write_reg(0x3b0090, reg);
 	if (!ret) {
 		PRINT_ER( "[atwilc start]: fail write reg 0x3b0090 ...\n");
-		if(genuChipPSstateFromWifi == CHIP_SLEEPING_AUTO)
-		{
-			release_bus(RELEASE_ALLOW_SLEEP, PWR_DEV_SRC_BT);
-		}
-		else
-		{
-			release_bus(RELEASE_ONLY, PWR_DEV_SRC_BT);
-		}
+		release_bus(RELEASE_ALLOW_SLEEP, PWR_DEV_SRC_BT);
 		goto _fail_1;
 	}
 	
@@ -1034,14 +1134,7 @@ static int atwilc_bt_firmware_download(void)
 	pwr_dev.hif_func.hif_write_reg(0x3B0400, reg);
 	//pwr_dev.os_func.os_leave_cs(p->hif_lock);
 	
-	if(genuChipPSstateFromWifi == CHIP_SLEEPING_AUTO)
-	{
-		release_bus(RELEASE_ALLOW_SLEEP, PWR_DEV_SRC_BT);
-	}
-	else
-	{
-		release_bus(RELEASE_ONLY, PWR_DEV_SRC_BT);
-	}
+	release_bus(RELEASE_ALLOW_SLEEP, PWR_DEV_SRC_BT);
 	
 	// blocks of sizes > 512 causes the wifi to hang!
 	blksz = (1ul << 9);//(1ul << 12); /* Bug 4703: 4KB Good enough size for most platforms = PAGE_SIZE. */
@@ -1089,15 +1182,8 @@ static int atwilc_bt_firmware_download(void)
 			#ifdef PLAT_ALLWINNER_A31
 			linux_wlan_msleep(1); // linux_wlan_atomic_msleep
 			#endif
-			
-			if(genuChipPSstateFromWifi == CHIP_SLEEPING_AUTO)
-			{
-				release_bus(RELEASE_ALLOW_SLEEP, PWR_DEV_SRC_BT);
-			}
-			else
-			{
-				release_bus(RELEASE_ONLY, PWR_DEV_SRC_BT);
-			}
+	
+			release_bus(RELEASE_ALLOW_SLEEP, PWR_DEV_SRC_BT);
 			
 			if (!ret) break;
 
@@ -1174,18 +1260,45 @@ static int atwilc_bt_start(void)
 	pwr_dev.hif_func.hif_write_reg(0x3B0400, val32);
 			
 	PRINT_D(INIT_DBG,"BT Start Succeeded \n");
-		
-	if(genuChipPSstateFromWifi == CHIP_SLEEPING_AUTO)
-	{
-		release_bus(RELEASE_ALLOW_SLEEP, PWR_DEV_SRC_BT);
-	}
-	else
-	{
-		release_bus(RELEASE_ONLY, PWR_DEV_SRC_BT);
-	}
+
+	release_bus(RELEASE_ALLOW_SLEEP, PWR_DEV_SRC_BT);
 	
 	return (ret<0)?ret:0;
 }
+
+
+void (*pf_chip_sleep_manually)(ATL_Uint32 , int )=NULL;
+int (*pf_get_num_conn_ifcs)(void)=NULL;
+void (*pf_host_wakeup_notify)(int)=NULL;
+void (*pf_host_sleep_notify)(int)=NULL;
+int (*pf_get_u8SuspendOnEvent_value)(void)=NULL;
+
+void set_pf_chip_sleep_manually(void (*chip_sleep_manually_address)(ATL_Uint32 , int ))
+{
+	pf_chip_sleep_manually=chip_sleep_manually_address;
+}
+
+void set_pf_get_num_conn_ifcs(int (*get_num_conn_ifcs_address)(void))
+{
+	pf_get_num_conn_ifcs=get_num_conn_ifcs_address;
+}
+
+void set_pf_host_wakeup_notify(void (*host_wakeup_notify_address)( int ))
+{
+	pf_host_wakeup_notify=host_wakeup_notify_address;
+}
+
+void set_pf_host_sleep_notify(void (*host_sleep_notify_address)( int ))
+{
+	pf_host_sleep_notify=host_sleep_notify_address;
+}
+void set_pf_get_u8SuspendOnEvent_value(int (*get_u8SuspendOnEvent_val)(void))
+{
+	pf_get_u8SuspendOnEvent_value=get_u8SuspendOnEvent_val;
+}
+
+
+
 
 module_init(at_pwr_dev_init);
 module_exit(at_pwr_dev_deinit);
@@ -1229,6 +1342,15 @@ EXPORT_SYMBOL(linux_wlan_free);
 EXPORT_SYMBOL(at_pwr_unregister_bus);
 EXPORT_SYMBOL(internal_alloc);
 EXPORT_SYMBOL(linux_wlan_msleep);
+#ifdef ATWILC_BT_COEXISTENCE
+EXPORT_SYMBOL(atwilc_set_pf_change_coex_mode);
+#endif
+EXPORT_SYMBOL(set_pf_chip_sleep_manually);
+EXPORT_SYMBOL(set_pf_get_num_conn_ifcs);
+
+EXPORT_SYMBOL(set_pf_host_wakeup_notify);
+EXPORT_SYMBOL(set_pf_host_sleep_notify);
+EXPORT_SYMBOL(set_pf_get_u8SuspendOnEvent_value);
 
 #ifdef ATWILC_DEBUGFS
 EXPORT_SYMBOL(atwilc_debugfs_init);

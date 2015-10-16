@@ -69,6 +69,22 @@
 #define GO_MODE	0x03
 #define CLIENT_MODE	0x04
 
+/*TicketId1092*/
+#ifdef ATWILC_BT_COEXISTENCE
+typedef enum{
+	COEX_OFF = 0,
+	COEX_ON, 		
+	COEX_FORCE_WIFI,
+	COEX_FORCE_BT,
+} tenuCoexMode;
+
+/*TicketId1115*/
+typedef enum{
+	COEX_NULL_FRAMES_OFF = 0,
+	COEX_NULL_FRAMES_ON, 		
+} tenuCoexNullFramesMode;
+#endif /*ATWILC_BT_COEXISTENCE*/
+
 
 #define MAX_NUM_STA                  9
 #define ACTIVE_SCAN_TIME			10
@@ -1380,8 +1396,8 @@ ATL_Sint32 host_int_set_wfi_drv_handler(ATL_Uint32 u32address);
 ATL_Sint32 host_int_set_operation_mode(ATWILC_WFIDrvHandle hWFIDrv, ATL_Uint32 u32mode);
 
 #ifdef ATWILC_BT_COEXISTENCE
-ATL_Sint32 host_int_change_bt_coex_mode(ATWILC_WFIDrvHandle hWFIDrv,ATL_Uint8 u8BtCoexMode);
-#endif
+ATL_Sint32 host_int_change_bt_coex_mode(ATWILC_WFIDrvHandle hWFIDrv,tenuCoexMode u8BtCoexMode);
+#endif /*ATWILC_BT_COEXISTENCE*/
 
 ATL_Sint32 Handle_ScanDone(void* drvHandler,tenuScanEvent enuEvent);
 

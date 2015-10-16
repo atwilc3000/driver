@@ -57,8 +57,6 @@
 
 ********************************************/
 #define ATWILC_PERIPH_REG_BASE 0x1000
-/*BugID_5137*/
-#define ATWILC_CHANGING_VIR_IF                     (0x108c)
 #define ATWILC_CHIPID	(ATWILC_PERIPH_REG_BASE)
 #define ATWILC_GLB_RESET_0 (ATWILC_PERIPH_REG_BASE + 0x400)
 #define ATWILC_PIN_MUX_0 (ATWILC_PERIPH_REG_BASE + 0x408)
@@ -72,7 +70,7 @@
 #define ATWILC_INTERRUPT_CORTUS_0	(ATWILC_PERIPH_REG_BASE + 0xa8)
 #define ATWILC_MISC	(ATWILC_PERIPH_REG_BASE+0x428)
 #define ATWILC_INTR_REG_BASE (ATWILC_PERIPH_REG_BASE+0xa00)
-#define ATWILC_INTR_ENABLE (ATWILC_INTR_REG_BASE)
+#define ATWILC_INTR_ENABLE (ATWILC_INTR_REG_BASE)
 #define ATWILC_INTR2_ENABLE (ATWILC_INTR_REG_BASE+4)
 
 #define ATWILC_INTR_POLARITY (ATWILC_INTR_REG_BASE+0x10)
@@ -117,6 +115,10 @@
 
 #define rCOEXIST_CTL 			(0x161E00)
 #define rGLOBAL_MODE_CONTROL	(0x1614)
+#define rPWR_SEQ_MISC_CTRL		(0x3008)
+#define rCOE_AUTO_PS_ON_NULL_PKT 	(0x160468)
+#define rCOE_AUTO_PS_OFF_NULL_PKT (0x16046C)
+#define rPA_CONTROL				(0x9804)
 
 #define rHAVE_SDIO_IRQ_GPIO_BIT      (0)
 #define rHAVE_USE_PMU_BIT            (1)
@@ -290,5 +292,10 @@ typedef struct {
 	int (*rx_indicate)(uint8_t *, int, atwilc_cfg_rsp_t *);
 	int (*cfg_init)(atwilc_debug_func);
 } atwilc_cfg_func_t;
+void chip_sleep_manually(ATL_Uint32 u32SleepTime , int source);
+
+void atwilc_host_sleep_notify( int source);
+void atwilc_host_wakeup_notify(int source);
+
 
 #endif

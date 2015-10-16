@@ -39,11 +39,6 @@
 #include "linux_wlan_sdio.h"
 #include <linux/mmc/host.h>
 #include <linux/mmc/card.h>
-#ifdef RESCAN_SDIO
-extern struct mmc_host* mmc_host_backup[10];
-extern void mmc_start_host(struct mmc_host *host);
-extern void mmc_stop_host(struct mmc_host *host);
-#endif //RESCAN_SDIO
 #else
 #include "linux_wlan_spi.h"
 #endif
@@ -58,7 +53,6 @@ extern void mmc_stop_host(struct mmc_host *host);
 #ifdef DISABLE_PWRSAVE_AND_SCAN_DURING_IP
 extern ATL_Bool g_obtainingIP;
 #endif
-extern ATL_Uint16 Set_machw_change_vir_if(ATL_Bool bValue);
 extern void resolve_disconnect_aberration(void* drvHandler);
 extern ATL_Uint8 gau8MulticastMacAddrList[ATWILC_MULTICAST_TABLE_SIZE][ETH_ALEN];
 void atwilc_wlan_deinit(linux_wlan_t *nic);
@@ -246,7 +240,7 @@ static int DebuggingThreadTask(void* vp)
 {
 	tstrATWILC_WFIDrv* pstrWFIDrv;
 	ATL_Uint32 drvHandler;
-	int timeout = 100;
+	int timeout = 50;
 	int i = 0;
 
 
@@ -857,6 +851,28 @@ int linux_wlan_get_num_conn_ifcs(void)
 	return ret_val;
 }
 
+/*TicketId883*/
+#ifdef ATWILC_BT_COEXISTENCE
+int linux_wlan_change_bt_coex_mode(uint8_t u8BtCoexMode)
+{
+	tstrATWILC_WFIDrv * pstrWFIDrv;
+	struct ATWILC_WFI_priv* priv;
+	struct net_device * dev;
+
+	dev = g_linux_wlan->strInterfaceInfo[0].atwilc_netdev;
+	priv = wiphy_priv(dev->ieee80211_ptr->wiphy);
+	if(priv == NULL)
+	{
+		ATL_PRINTF("No Wireless Priv\n");
+		return -1;
+	}
+	
+	pstrWFIDrv = (tstrATWILC_WFIDrv *)priv->hATWILCWFIDrv;
+	host_int_change_bt_coex_mode((ATWILC_WFIDrvHandle)pstrWFIDrv, u8BtCoexMode);
+	return 0;
+}
+#endif /*ATWILC_BT_COEXISTENCE*/
+
 static int linux_wlan_rxq_task(void* vp){
 
 	/* inform atwilc_wlan_init that RXQ task is started. */
@@ -1152,7 +1168,6 @@ _FAIL_:
 static int linux_wlan_init_test_config(struct net_device *dev, linux_wlan_t* p_nic){
 
 	unsigned char c_val[64];
-	unsigned char mac_add[] = {0x00, 0x80, 0xC2, 0x5E, 0xa2, 0xf3};
 	unsigned int chipid = 0;
 
 	/*BugID_5077*/
@@ -1167,7 +1182,6 @@ static int linux_wlan_init_test_config(struct net_device *dev, linux_wlan_t* p_n
 	pstrWFIDrv = (tstrATWILC_WFIDrv *)priv->hATWILCWFIDrv;
 	PRINT_D(INIT_DBG, "Host = %x\n",(ATL_Uint32)pstrWFIDrv);
 
-	PRINT_D(INIT_DBG,"MAC address is : %02x-%02x-%02x-%02x-%02x-%02x\n", mac_add[0],mac_add[1],mac_add[2],mac_add[3],mac_add[4],mac_add[5]);
 	chipid = atwilc_get_chipid(0);
 
 	
@@ -1176,11 +1190,6 @@ static int linux_wlan_init_test_config(struct net_device *dev, linux_wlan_t* p_n
 		printk("Null p[ointer\n");
 		goto _fail_;
 	}
-
-	*(int*)c_val = (ATL_Uint32)pstrWFIDrv;
-
-	if (!g_linux_wlan->oup.wlan_cfg_set(1, WID_SET_DRV_HANDLER, c_val, 4, 0,0))
-		goto _fail_;
 	
 	/*to tell fw that we are going to use PC test - ATWILC specific*/
 	c_val[0] = 0;
@@ -1387,11 +1396,6 @@ static int linux_wlan_init_test_config(struct net_device *dev, linux_wlan_t* p_n
 	c_val[0] = 1; 	/* TXOP Prot disable in N mode: No RTS-CTS on TX A-MPDUs to save air-time. */
 	if (!g_linux_wlan->oup.wlan_cfg_set(0, WID_11N_TXOP_PROT_DISABLE, c_val, 1, 0,0))
 		goto _fail_;	
-
-	memcpy(c_val, mac_add, 6);
-
-	if (!g_linux_wlan->oup.wlan_cfg_set(0, WID_MAC_ADDR, c_val, 6, 0,0))
-		goto _fail_;
 	
 	/**
 		AP only
@@ -1794,11 +1798,6 @@ extern volatile int probe;
 
 #if defined(PLAT_ALLWINNER_A20)
 extern uint8_t core_11b_ready(void);
-extern void sw_mci_rescan_card(unsigned id, unsigned insert);
-extern void wifi_pm_power(int on);	// tony to keep allwinner's rule
-
-
-#define ATWILC_SDIO_CARD_ID	3
 #define READY_CHECK_THRESHOLD		30
 extern void atwilc_wlan_global_reset(void);
 uint8_t atwilc_prepare_11b_core(atwilc_wlan_inp_t *nwi,	atwilc_wlan_oup_t *nwo,linux_wlan_t * nic)
@@ -1811,10 +1810,10 @@ uint8_t atwilc_prepare_11b_core(atwilc_wlan_inp_t *nwi,	atwilc_wlan_oup_t *nwo,l
 			atwilc_wlan_global_reset();
 			sdio_unregister_driver(&atwilc_bus);	
 			//wifi_pm_power(0);
-			sw_mci_rescan_card(ATWILC_SDIO_CARD_ID, 0);
-			mdelay(100);
+			//sw_mci_rescan_card(ATWILC_SDIO_CARD_ID, 0);
+			//mdelay(100);
 			//wifi_pm_power(1);
-			sw_mci_rescan_card(ATWILC_SDIO_CARD_ID, 1);
+			//sw_mci_rescan_card(ATWILC_SDIO_CARD_ID, 1);
 			sdio_register_driver(&atwilc_bus);
 				
 			while(!probe)
@@ -2116,14 +2115,13 @@ void    ATWILC_WFI_frame_register(struct wiphy *wiphy,struct net_device *dev,
 #if !defined (NM73131_0_BOARD)
 int mac_open(struct net_device *ndev){    
 	perInterface_wlan_t* nic;
-	
-	/*BugID_5213*/
-	/*No need for setting mac address here anymore,*/
-	/*Just set it in init_test_config()*/
 	unsigned char mac_add[ETH_ALEN] ={0};
+	unsigned char mac_address[NUM_CONCURRENT_IFC][ETH_ALEN] = {{0x00, 0x80, 0xC2, 0x5E, 0xa2, 0xf1}	/*P2P & AP mac address*/
+															, {0x00, 0x80, 0xC2, 0x5E, 0xa2, 0xf2}};	/*WLAN mac address*/
 	int status;
 	int ret = 0;
 	int i = 0;	
+	static int count = 0;
 	struct ATWILC_WFI_priv* priv;
 	
 	nic = netdev_priv(ndev);
@@ -2146,26 +2144,32 @@ int mac_open(struct net_device *ndev){
 	#endif
 	
 	/*initialize platform*/
-	PRINT_D(INIT_DBG,"*** re-init ***\n");
 	ret = atwilc_wlan_init(ndev, nic);
 	if(ret < 0)
 	{
 		PRINT_ER("Failed to initialize atwilc\n");
-		ATWILC_WFI_DeInitHostInt(ndev);
+
+		/*If recovering from a crash, then actually host interface was not reinitializaed, so don't re-deinit it*/
+		if(!gbCrashRecover)
+		{
+			ATWILC_WFI_DeInitHostInt(ndev);
+		}
+		
 		return  ret;
 	}
-
-	Set_machw_change_vir_if(ATL_FALSE);
 
 	/*TicketId1003*/
 	/*Reset the recovery flag here to allow getting mac address and registering frames*/
 	g_bWaitForRecovery = 0;
-	
+
+	host_int_set_wfi_drv_handler((ATL_Uint32)priv->hATWILCWFIDrv);
+	host_int_set_MacAddress(priv->hATWILCWFIDrv, mac_address[count]);
+
 	status = host_int_get_MacAddress(priv->hATWILCWFIDrv, mac_add);
 	PRINT_D(INIT_DBG, "Mac address: %x:%x:%x:%x:%x:%x\n", mac_add[0], mac_add[1], mac_add[2],
 															mac_add[3], mac_add[4], mac_add[5]);
 
-	//loop through the NUM of supported devices and set the MAC address
+	/*Loop through the NUM of supported devices and set the MAC address*/
 	for(i=0;i<g_linux_wlan->u8NoIfcs;i++)
 	{
 		if(ndev == g_linux_wlan->strInterfaceInfo[i].atwilc_netdev)
@@ -2193,7 +2197,13 @@ int mac_open(struct net_device *ndev){
     	netif_wake_queue(ndev); 
  	g_linux_wlan->open_ifcs++;
 	nic->mac_opened=1;
-    return 0;
+	count++;
+	
+	/*TicketId883*/
+	/*Reset count after 2nd mac_open so that correctly handling crash recovery if happened*/
+	if(count == 2)
+		count = 0;
+	return 0;
 	
 _err_:
 	ATWILC_WFI_DeInitHostInt(ndev);
@@ -2613,10 +2623,13 @@ int mac_ioctl(struct net_device *ndev, struct ifreq *req, int cmd){
 
 			if(strnicmp(buff, "BTCOEXMODE", strlen("BTCOEXMODE")) == 0) {						
 				uint32_t mode = *(buff + strlen("BTCOEXMODE") + 1) - '0';
-		        #ifdef ATWILC_BT_COEXISTENCE
+		        	#ifdef ATWILC_BT_COEXISTENCE
 				PRINT_D(GENERIC_DBG, "[COEX] [DRV] rcvd IO ctrl << BT-MODE: %d >>\n",mode);
 				{
-					host_int_change_bt_coex_mode(priv->hATWILCWFIDrv,mode);
+					/*TicketId1092*/
+					/*If WiFi is off and BT is turning on, set COEX_ON mode*/
+
+						//host_int_change_bt_coex_mode(priv->hATWILCWFIDrv, COEX_ON);
 				}
 				#endif			        		
         	}
@@ -2687,7 +2700,7 @@ int mac_ioctl(struct net_device *ndev, struct ifreq *req, int cmd){
 						printk("[COEX] [DRV] rcvd IO ctrl << BT-MODE: %d >>\n",mode);
 						if(mode != 1 && mode != 0)
 						{
-							host_int_change_bt_coex_mode(priv->hATWILCWFIDrv,mode);
+							//host_int_change_bt_coex_mode(priv->hATWILCWFIDrv,mode);
 						}
 					#endif			        		
 			        }else if(strnicmp(buff, "BTCOEXSCAN-START", strlen("BTCOEXSCAN-START")) == 0) {						
@@ -2830,7 +2843,7 @@ void frmw_to_linux(uint8_t *buff, uint32_t size,uint32_t pkt_offset){
 			//ATL_PRINTF("Protocol = %4x\n",skb->protocol);
 			pu8UdpBuffer = (char*)ih + sizeof(struct iphdr);
 			//printk("Port No = %d,%d\n",pu8UdpBuffer[1],pu8UdpBuffer[3]);
-			if(buff_to_send[35] == 67 && buff_to_send[37] == 68)
+			if((buff_to_send[35] == 67 && buff_to_send[37] == 68) || (buff_to_send[35] == 68 && buff_to_send[37] == 67))
 			{
 				PRINT_D(RX_DBG,"DHCP Message received\n");
 			}
@@ -2981,13 +2994,24 @@ static int __init init_atwilc_driver(void){
 #endif
 
 	/* driver version in Makefile */
-	printk("*** WILC3000 driver VERSION=[%s], fw VERSION=[%s] ***\n", __DRIVER_VERSION__, __FW_VERSION__);
-
+	//printk("*** ATWILC3000 driver VERSION=[%s], fw VERSION=[%s], REVISON=[%s] ***\n", __DRIVER_VERSION__, __FW_VERSION__, SVNREV);
+	set_pf_chip_sleep_manually(chip_sleep_manually);
+	set_pf_get_num_conn_ifcs( linux_wlan_get_num_conn_ifcs);
+	set_pf_host_wakeup_notify(atwilc_host_wakeup_notify);
+	set_pf_host_sleep_notify(atwilc_host_sleep_notify);
+	set_pf_get_u8SuspendOnEvent_value(ATWILC_WFI_get_u8SuspendOnEvent_value);
+	
 	at_pwr_power_up(PWR_DEV_SRC_WIFI);
 	ret = at_pwr_register_bus(PWR_DEV_SRC_WIFI);
 		
 	if(ret < 0)
 		return ret;
+
+	/*TicketId883*/
+	/*Pass to pwr dev a function pointer to change coex mode*/
+	#ifdef ATWILC_BT_COEXISTENCE
+	atwilc_set_pf_change_coex_mode(linux_wlan_change_bt_coex_mode);
+	#endif
 
 	PRINT_D(INIT_DBG,"Initializing netdev\n");
 	if(atwilc_netdev_init()){
@@ -3004,6 +3028,12 @@ static void __exit exit_atwilc_driver(void)
 	int i = 0;
 	perInterface_wlan_t* nic[NUM_CONCURRENT_IFC];
 	#define CLOSE_TIMEOUT 3*1000
+
+	/*TicketId883*/
+	/*Reset chnage coex mode function pointer to NULL*/
+	#ifdef ATWILC_BT_COEXISTENCE
+	atwilc_set_pf_change_coex_mode(ATL_NULL);
+	#endif
 
 	if( (g_linux_wlan != NULL)  &&( ((g_linux_wlan->strInterfaceInfo[0].atwilc_netdev) != NULL)
 		|| ((g_linux_wlan->strInterfaceInfo[1].atwilc_netdev) != NULL)))

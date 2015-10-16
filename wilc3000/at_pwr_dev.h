@@ -142,6 +142,11 @@ typedef struct {
 	int (*hif_sync_ext)(int);	
 } atwilc_hif_func_t;
 
+/*TicketId883*/
+#ifdef ATWILC_BT_COEXISTENCE
+typedef int (*tATWILCpfChangeCoexMode)(uint8_t);
+#endif
+
 /*!
 *	@brief		Initialize bluetooth power device
 *	@details		
@@ -213,8 +218,34 @@ int at_pwr_power_down(int source);
 *	@version	1.0
 */
 
+#ifdef ATWILC_BT_COEXISTENCE
+/*!
+*	@brief		Set pointer to function that changes coex mode
+*	@details		In case of WiFi is ON, BT when powering up needs to send a config WID to set coex mode ON
+*	@return		None
+*	@author		Amr Abdelmoghny
+*	@date		9 JUNE 2015
+*	@version		1.0
+*/
+void atwilc_set_pf_change_coex_mode(tATWILCpfChangeCoexMode pfChangeCoexMode);
+#endif
+
 void chip_allow_sleep(int source);
 void chip_wakeup(int source);
+
+
+
+void set_pf_chip_sleep_manually(void (*chip_sleep_manually_address)(ATL_Uint32 , int ));
+
+
+void set_pf_get_num_conn_ifcs(int (*get_num_conn_ifcs_address)(void));
+void set_pf_host_wakeup_notify(void (*host_wakeup_notify_address)( int ));
+
+
+void set_pf_host_sleep_notify(void (*host_sleep_notify_address)( int ));
+
+void set_pf_get_u8SuspendOnEvent_value(int (*get_u8SuspendOnEvent_val)(void));
+
 
 void acquire_bus(BUS_ACQUIRE_T acquire, int source);
 void release_bus(BUS_RELEASE_T release, int source);

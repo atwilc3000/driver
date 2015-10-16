@@ -7,6 +7,7 @@
 
 #include "linux_wlan_sdio.h"
 #include "linux_wlan_common.h"
+#include "at_pwr_dev.h"
 
 
 #if defined (NM73131_0_BOARD)
@@ -154,11 +155,73 @@ static void linux_sdio_remove(struct sdio_func *func)
 	
 }
 
+int sdio_init(atwilc_wlan_inp_t *inp, atwilc_debug_func func);
+int sdio_deinit(void *pv);
+void chip_wakeup(int source);
+void chip_allow_sleep(int source);
+extern void (*pf_chip_sleep_manually)(ATL_Uint32 , int );
+extern int (*pf_get_num_conn_ifcs)(void);
+extern void (*pf_host_wakeup_notify)(int);
+extern void (*pf_host_sleep_notify)(int);
+extern int (*pf_get_u8SuspendOnEvent_value)(void);
+static int atwilc_sdio_suspend(struct device *dev)
+{
+	printk("\n\n << SUSPEND >>\n\n");
+	chip_wakeup(0);
+	/*if there is no events , put the chip in low power mode */
+	if(pf_get_u8SuspendOnEvent_value()== 0)
+		
+	{
+		/*BugID_5213*/
+		/*Allow chip sleep, only if both interfaces are not connected*/
+		if(!pf_get_num_conn_ifcs())
+		{
+			pf_chip_sleep_manually(0xFFFFFFFF,0);
+		}
+	}
+	else
+	{
+		/*notify the chip that host will sleep*/
+		pf_host_sleep_notify(0);
+		chip_allow_sleep(0);
+	}
+	/*reset SDIO to allow kerenl reintilaization at wake up*/
+	sdio_deinit(NULL);
+	/*claim the host to prevent driver SDIO access before resume is called*/
+	sdio_claim_host(local_sdio_func);
+	return 0 ;
+}
+static int atwilc_sdio_resume(struct device *dev)
+{
+	sdio_release_host(local_sdio_func);
+	/*wake the chip to compelete the re-intialization*/
+	chip_wakeup(0);
+	printk("\n\n  <<RESUME>> \n\n");	
+	/*Init SDIO block mode*/
+	sdio_init(NULL,NULL);
+	/*if there is an event , notify the chip that the host is awake now*/
+	if(pf_get_u8SuspendOnEvent_value()== 1)
+		pf_host_wakeup_notify(0);
+
+	chip_allow_sleep(0);
+    return 0;
+
+}
+
+static const struct dev_pm_ops atwilc_sdio_pm_ops = {	
+     .suspend = atwilc_sdio_suspend,    
+     .resume    = atwilc_sdio_resume,
+    	};
+
 struct sdio_driver atwilc_bus = {
 	.name		= SDIO_MODALIAS,
 	.id_table	= atwilc_sdio_ids,
 	.probe		= linux_sdio_probe,
 	.remove		= linux_sdio_remove,
+
+    .drv      = {
+                  .pm = &atwilc_sdio_pm_ops,
+               }
 };
 
 int enable_sdio_interrupt(isr_handler_t p_isr_handler){

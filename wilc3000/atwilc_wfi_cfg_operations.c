@@ -21,7 +21,6 @@
 extern void linux_wlan_free(void* vp);
 extern int linux_wlan_get_firmware(perInterface_wlan_t* p_nic);
 extern void linux_wlan_unlock(void* vp);
-extern ATL_Uint16 Set_machw_change_vir_if(ATL_Bool bValue);
 
 extern int mac_open(struct net_device *ndev);
 extern int mac_close(struct net_device *ndev);
@@ -1721,8 +1720,6 @@ static int ATWILC_WFI_del_key(struct wiphy *wiphy, struct net_device *netdev,
 				g_key_gtk_params.seq = NULL;
 			}
 
-			/*Reset ATWILC_CHANGING_VIR_IF register to allow adding futrue keys to CE H/W*/
-			Set_machw_change_vir_if(ATL_FALSE);
 		}
 	
 		if(key_index >= 0 && key_index <=3)
@@ -1926,6 +1923,13 @@ static int ATWILC_WFI_get_station(struct wiphy *wiphy, struct net_device *dev,
 	if(nic->iftype == STATION_MODE)
 	{
 		tstrStatistics strStatistics;
+
+		if(!g_linux_wlan->atwilc_initialized)
+		{
+			PRINT_D(CFG80211_DBG,"driver not initialized, return error\n");
+			return -EBUSY;
+		}
+		
 		host_int_get_statistics(priv->hATWILCWFIDrv,&strStatistics);
 		
         /*
@@ -3349,7 +3353,6 @@ static int ATWILC_WFI_change_virt_intf(struct wiphy *wiphy,struct net_device *de
 	struct ATWILC_WFI_priv* priv;
 	//struct ATWILC_WFI_mon_priv* mon_priv;
 	perInterface_wlan_t* nic;
-	ATL_Uint8 interface_type;
 	ATL_Uint16 TID=0;
 	#ifdef ATWILC_P2P
 	ATL_Uint8 i;
@@ -3370,221 +3373,55 @@ static int ATWILC_WFI_change_virt_intf(struct wiphy *wiphy,struct net_device *de
 	ATL_TimerStop(&hDuringIpTimer, ATL_NULL);
 	PRINT_D(GENERIC_DBG,"Changing virtual interface, enable scan\n");
 	#endif
-	/*BugID_5137*/	
-	/*Set ATWILC_CHANGING_VIR_IF register to disallow adding futrue keys to CE H/W*/
-	if(g_ptk_keys_saved && g_gtk_keys_saved)
-	{
-		Set_machw_change_vir_if(ATL_TRUE);
-	}
 
 	switch(type)
 	{
 	case NL80211_IFTYPE_STATION:
 		connecting = 0;
 		PRINT_D(HOSTAPD_DBG,"Interface type = NL80211_IFTYPE_STATION\n");
-		//linux_wlan_set_bssid(dev,g_linux_wlan->strInterfaceInfo[0].aSrcAddress);
-		
-		//send delba over wlan interface
-		
-		
+	
 		dev->ieee80211_ptr->iftype = type;
 		priv->wdev->iftype = type;
 		nic->monitor_flag = 0;
 		nic->iftype = STATION_MODE;
 
+		host_int_set_operation_mode(priv->hATWILCWFIDrv,STATION_MODE);
+
 		/*Remove the enteries of the previously connected clients*/
 		memset(priv->assoc_stainfo.au8Sta_AssociatedBss, 0, MAX_NUM_STA * ETH_ALEN);
-			#ifndef SIMULATION
-			#ifdef ATWILC_P2P
-			interface_type = nic->iftype;
-			nic->iftype = STATION_MODE;
-			
-			if(g_linux_wlan->atwilc_initialized)
-			{
 
-				host_int_del_All_Rx_BASession(priv->hATWILCWFIDrv, g_linux_wlan->strInterfaceInfo[0].aBSSID, TID);
+		bEnablePS = ATL_TRUE;
+		host_int_set_power_mgmt( priv->hATWILCWFIDrv, 1, 0);
 
-				// ensure that the message Q is empty
-				host_int_wait_msg_queue_idle();
+		/*TicketId1092*/
+		/*Enbale coex mode when disconnecting P2P*/
+		#ifdef ATWILC_BT_COEXISTENCE
+		host_int_change_bt_coex_mode(priv->hATWILCWFIDrv, COEX_ON);
+		#endif /*ATWILC_BT_COEXISTENCE*/
 
-				/*BugID_5213*/
-				/*Eliminate host interface blocking state*/
-				linux_wlan_unlock((void *)&g_linux_wlan->cfg_event);
-				
-				atwilc_wlan_deinit(g_linux_wlan);
-				atwilc_wlan_init(dev, nic);
-				g_atwilc_initialized = 1;
-				nic->iftype = interface_type;
-
-				/*Setting interface 1 drv handler and mac address in newly downloaded FW*/
-				host_int_set_wfi_drv_handler(g_linux_wlan->strInterfaceInfo[0].drvHandler);
-				host_int_set_MacAddress((ATWILC_WFIDrvHandle)(g_linux_wlan->strInterfaceInfo[0].drvHandler),
-										g_linux_wlan->strInterfaceInfo[0].aSrcAddress);
-				host_int_set_operation_mode(priv->hATWILCWFIDrv,STATION_MODE);
-
-				/*Add saved WEP keys, if any*/
-				if(g_wep_keys_saved)
-				{
-					host_int_set_WEPDefaultKeyID((ATWILC_WFIDrvHandle)(g_linux_wlan->strInterfaceInfo[0].drvHandler),
-												g_key_wep_params.key_idx);
-					host_int_add_wep_key_bss_sta((ATWILC_WFIDrvHandle)(g_linux_wlan->strInterfaceInfo[0].drvHandler),
-												g_key_wep_params.key,
-												g_key_wep_params.key_len,
-												g_key_wep_params.key_idx);
-				}
-
-				/*No matter the driver handler passed here, it will be overwriiten*/
-				/*in Handle_FlushConnect() with gu8FlushedJoinReqDrvHandler*/
-				host_int_flush_join_req(priv->hATWILCWFIDrv);
-
-				/*Add saved PTK and GTK keys, if any*/
-				if(g_ptk_keys_saved && g_gtk_keys_saved)
-				{
-					PRINT_D(CFG80211_DBG,"ptk %x %x %x\n",g_key_ptk_params.key[0],
-												g_key_ptk_params.key[1],
-												g_key_ptk_params.key[2]);
-					PRINT_D(CFG80211_DBG,"gtk %x %x %x\n",g_key_gtk_params.key[0],
-												g_key_gtk_params.key[1],
-												g_key_gtk_params.key[2]);
-					ATWILC_WFI_add_key(g_linux_wlan->strInterfaceInfo[0].atwilc_netdev->ieee80211_ptr->wiphy,
-										g_linux_wlan->strInterfaceInfo[0].atwilc_netdev,
-										g_add_ptk_key_params.key_idx,
-										#if LINUX_VERSION_CODE > KERNEL_VERSION(2,6,36)
-										g_add_ptk_key_params.pairwise,
-										#endif
-										g_add_ptk_key_params.mac_addr,
-										(struct key_params *)(&g_key_ptk_params));
-
-					ATWILC_WFI_add_key(g_linux_wlan->strInterfaceInfo[0].atwilc_netdev->ieee80211_ptr->wiphy,
-										g_linux_wlan->strInterfaceInfo[0].atwilc_netdev,
-										g_add_gtk_key_params.key_idx,
-										#if LINUX_VERSION_CODE > KERNEL_VERSION(2,6,36)
-										g_add_gtk_key_params.pairwise,
-										#endif
-										g_add_gtk_key_params.mac_addr,
-										(struct key_params *)(&g_key_gtk_params));
-				}
-				
-				/*BugID_4847: registered frames in firmware are now*/
-				/*lost due to mac close. So re-register those frames*/
-				if(g_linux_wlan->atwilc_initialized)
-				{
-					for(i=0; i<num_reg_frame; i++)
-					{
-						PRINT_D(INIT_DBG,"Frame registering Type: %x - Reg: %d\n", nic->g_struct_frame_reg[i].frame_type, 
-																				nic->g_struct_frame_reg[i].reg);
-						host_int_frame_register(priv->hATWILCWFIDrv,
-												nic->g_struct_frame_reg[i].frame_type,
-												nic->g_struct_frame_reg[i].reg);
-					}
-				}
-
-				bEnablePS = ATL_TRUE;
-				host_int_set_power_mgmt( priv->hATWILCWFIDrv, 1, 0);
-			}
-			#endif
-			#endif
 		break;
 		
 	case NL80211_IFTYPE_P2P_CLIENT:
-		bEnablePS = ATL_FALSE;
-		host_int_set_power_mgmt(priv->hATWILCWFIDrv, 0, 0);
 		connecting = 0;
 		PRINT_D(HOSTAPD_DBG,"Interface type = NL80211_IFTYPE_P2P_CLIENT\n");
-		//linux_wlan_set_bssid(dev,g_linux_wlan->strInterfaceInfo[0].aSrcAddress);
 		
-		host_int_del_All_Rx_BASession(priv->hATWILCWFIDrv, g_linux_wlan->strInterfaceInfo[0].aBSSID, TID);
+		//host_int_del_All_Rx_BASession(priv->hATWILCWFIDrv, g_linux_wlan->strInterfaceInfo[0].aBSSID, TID);
+		host_int_set_operation_mode(priv->hATWILCWFIDrv,STATION_MODE);
 			
 		dev->ieee80211_ptr->iftype = type;
 		priv->wdev->iftype = type;
 		nic->monitor_flag = 0;
-
-		#ifndef SIMULATION
-		#ifdef ATWILC_P2P
-		
-		PRINT_D(HOSTAPD_DBG,"Downloading P2P_CONCURRENCY_FIRMWARE\n");
 		nic->iftype = CLIENT_MODE;
 
+		bEnablePS = ATL_FALSE;
+		host_int_set_power_mgmt(priv->hATWILCWFIDrv, 0, 0);
+
+		/*TicketId1092*/
+		/*Disable coex mode when connecting P2P*/
+		#ifdef ATWILC_BT_COEXISTENCE
+		host_int_change_bt_coex_mode(priv->hATWILCWFIDrv, COEX_FORCE_WIFI);
+		#endif /*ATWILC_BT_COEXISTENCE*/
 		
-		if(g_linux_wlan->atwilc_initialized)
-		{	
-			// ensure that the message Q is empty
-			host_int_wait_msg_queue_idle();
-			
-			atwilc_wlan_deinit(g_linux_wlan);
-			atwilc_wlan_init(dev, nic);
-			g_atwilc_initialized = 1;
-	
-			host_int_set_wfi_drv_handler(g_linux_wlan->strInterfaceInfo[0].drvHandler);
-			host_int_set_MacAddress((ATWILC_WFIDrvHandle)(g_linux_wlan->strInterfaceInfo[0].drvHandler),
-								g_linux_wlan->strInterfaceInfo[0].aSrcAddress);
-			host_int_set_operation_mode(priv->hATWILCWFIDrv,STATION_MODE);
-
-		
-			/*Add saved WEP keys, if any*/
-			if(g_wep_keys_saved)
-			{
-				host_int_set_WEPDefaultKeyID((ATWILC_WFIDrvHandle)(g_linux_wlan->strInterfaceInfo[0].drvHandler),
-										g_key_wep_params.key_idx);
-				host_int_add_wep_key_bss_sta((ATWILC_WFIDrvHandle)(g_linux_wlan->strInterfaceInfo[0].drvHandler),
-										g_key_wep_params.key,
-										g_key_wep_params.key_len,
-										g_key_wep_params.key_idx);
-			}
-
-			/*No matter the driver handler passed here, it will be overwriiten*/
-			/*in Handle_FlushConnect() with gu8FlushedJoinReqDrvHandler*/
-			host_int_flush_join_req(priv->hATWILCWFIDrv);
-
-			/*Add saved PTK and GTK keys, if any*/
-			if(g_ptk_keys_saved && g_gtk_keys_saved)
-			{
-				PRINT_D(CFG80211_DBG,"ptk %x %x %x\n",g_key_ptk_params.key[0],
-										g_key_ptk_params.key[1],
-										g_key_ptk_params.key[2]);
-				PRINT_D(CFG80211_DBG,"gtk %x %x %x\n",g_key_gtk_params.key[0],
-										g_key_gtk_params.key[1],
-										g_key_gtk_params.key[2]);
-				ATWILC_WFI_add_key(g_linux_wlan->strInterfaceInfo[0].atwilc_netdev->ieee80211_ptr->wiphy,
-								g_linux_wlan->strInterfaceInfo[0].atwilc_netdev,
-								g_add_ptk_key_params.key_idx,
-								#if LINUX_VERSION_CODE > KERNEL_VERSION(2,6,36)
-								g_add_ptk_key_params.pairwise,
-								#endif
-								g_add_ptk_key_params.mac_addr,
-								(struct key_params *)(&g_key_ptk_params));
-
-				ATWILC_WFI_add_key(g_linux_wlan->strInterfaceInfo[0].atwilc_netdev->ieee80211_ptr->wiphy,
-								g_linux_wlan->strInterfaceInfo[0].atwilc_netdev,
-								g_add_gtk_key_params.key_idx,
-								#if LINUX_VERSION_CODE > KERNEL_VERSION(2,6,36)
-								g_add_gtk_key_params.pairwise,
-								#endif
-								g_add_gtk_key_params.mac_addr,
-								(struct key_params *)(&g_key_gtk_params));
-			}
-			
-			/*Refresh scan, to refresh the scan results to the wpa_supplicant. Set MachHw to false to enable further key installments*/
-			refresh_scan(priv,1,ATL_TRUE);
-			Set_machw_change_vir_if(ATL_FALSE);
-		
-			/*BugID_4847: registered frames in firmware are now lost
-			    due to mac close. So re-register those frames */
-			if(g_linux_wlan->atwilc_initialized)
-			{
-				
-				for(i=0; i<num_reg_frame; i++)
-				{
-					PRINT_D(INIT_DBG,"Frame registering Type: %x - Reg: %d\n", nic->g_struct_frame_reg[i].frame_type, 
-																		nic->g_struct_frame_reg[i].reg);
-					host_int_frame_register(priv->hATWILCWFIDrv,
-										nic->g_struct_frame_reg[i].frame_type,
-										nic->g_struct_frame_reg[i].reg);
-				}
-			}
-		}
-		#endif
-		#endif
 		break;
 
 	case NL80211_IFTYPE_AP:
@@ -3632,121 +3469,29 @@ static int ATWILC_WFI_change_virt_intf(struct wiphy *wiphy,struct net_device *de
 		break;
 		
 	case NL80211_IFTYPE_P2P_GO:
+		PRINT_D(HOSTAPD_DBG,"Interface type = NL80211_IFTYPE_GO\n");
 		PRINT_D(GENERIC_DBG,"start duringIP timer\n");
 
 		#ifdef DISABLE_PWRSAVE_AND_SCAN_DURING_IP
 		g_obtainingIP=ATL_TRUE;
 		ATL_TimerStart(&hDuringIpTimer, duringIP_TIME, ATL_NULL, ATL_NULL);
 		#endif
-		host_int_set_power_mgmt(priv->hATWILCWFIDrv, 0, 0);
-		/*BugID_5222*/
-		/*Delete block ack has to be the latest config packet*/
-		/*sent before downloading new FW. This is because it blocks on*/
-		/*hWaitResponse semaphore, which allows previous config*/
-		/*packets to actually take action on old FW*/
-		host_int_del_All_Rx_BASession(priv->hATWILCWFIDrv, g_linux_wlan->strInterfaceInfo[0].aBSSID, TID);
-		bEnablePS = ATL_FALSE;
-		PRINT_D(HOSTAPD_DBG,"Interface type = NL80211_IFTYPE_GO\n");
-		//linux_wlan_set_bssid(dev,g_linux_wlan->strInterfaceInfo[0].aSrcAddress);
-		//mon_priv = netdev_priv(dev);
-		//mon_priv->real_ndev = dev;
-		dev->ieee80211_ptr->iftype = type;
-		priv->wdev->iftype = type;
 
-		printk("(ATL_Uint32)priv->hATWILCWFIDrv[%x]\n",(ATL_Uint32)priv->hATWILCWFIDrv);
-		//host_int_set_operation_mode((ATL_Uint32)priv->hATWILCWFIDrv,AP_MODE);
-		
-		#ifndef SIMULATION
-		#ifdef ATWILC_P2P
-		PRINT_D(HOSTAPD_DBG,"Downloading P2P_CONCURRENCY_FIRMWARE\n");
-
-		
-		#if 1
-		nic->iftype = GO_MODE;
-		
-		// ensure that the message Q is empty
-		host_int_wait_msg_queue_idle();
-		
-		/*while(!g_hif_thread_idle)
-		{
-			PRINT_D(GENERIC_DBG, "Wait for host IF idle\n");
-			ATL_Sleep(10);
-		}*/
-		atwilc_wlan_deinit(g_linux_wlan);
-		//repeat_power_cycle_partially(g_linux_wlan);
-		atwilc_wlan_init(dev, nic);
-		g_atwilc_initialized = 1;
-	
-
-		/*Setting interface 1 drv handler and mac address in newly downloaded FW*/
-		host_int_set_wfi_drv_handler(g_linux_wlan->strInterfaceInfo[0].drvHandler);
-		host_int_set_MacAddress((ATWILC_WFIDrvHandle)(g_linux_wlan->strInterfaceInfo[0].drvHandler),
-								g_linux_wlan->strInterfaceInfo[0].aSrcAddress);
 		host_int_set_operation_mode(priv->hATWILCWFIDrv,AP_MODE);
 
-		/*Add saved WEP keys, if any*/
-		if(g_wep_keys_saved)
-		{
-			host_int_set_WEPDefaultKeyID((ATWILC_WFIDrvHandle)(g_linux_wlan->strInterfaceInfo[0].drvHandler),
-										g_key_wep_params.key_idx);
-			host_int_add_wep_key_bss_sta((ATWILC_WFIDrvHandle)(g_linux_wlan->strInterfaceInfo[0].drvHandler),
-										g_key_wep_params.key,
-										g_key_wep_params.key_len,
-										g_key_wep_params.key_idx);
-		}
-
-		/*No matter the driver handler passed here, it will be overwriiten*/
-		/*in Handle_FlushConnect() with gu8FlushedJoinReqDrvHandler*/
-		host_int_flush_join_req(priv->hATWILCWFIDrv);
-
-		/*Add saved PTK and GTK keys, if any*/
-		if(g_ptk_keys_saved && g_gtk_keys_saved)
-		{
-			PRINT_D(CFG80211_DBG,"ptk %x %x %x cipher %x\n",g_key_ptk_params.key[0],
-											g_key_ptk_params.key[1],
-											g_key_ptk_params.key[2],
-											g_key_ptk_params.cipher);
-			PRINT_D(CFG80211_DBG,"gtk %x %x %x cipher %x\n",g_key_gtk_params.key[0],
-											g_key_gtk_params.key[1],
-											g_key_gtk_params.key[2],
-											g_key_gtk_params.cipher);
-			#if 1
-			ATWILC_WFI_add_key(g_linux_wlan->strInterfaceInfo[0].atwilc_netdev->ieee80211_ptr->wiphy,
-								g_linux_wlan->strInterfaceInfo[0].atwilc_netdev,
-								g_add_ptk_key_params.key_idx,
-								#if LINUX_VERSION_CODE > KERNEL_VERSION(2,6,36)
-								g_add_ptk_key_params.pairwise,
-								#endif
-								g_add_ptk_key_params.mac_addr,
-								(struct key_params *)(&g_key_ptk_params));
-
-			ATWILC_WFI_add_key(g_linux_wlan->strInterfaceInfo[0].atwilc_netdev->ieee80211_ptr->wiphy,
-								g_linux_wlan->strInterfaceInfo[0].atwilc_netdev,
-								g_add_gtk_key_params.key_idx,
-								#if LINUX_VERSION_CODE > KERNEL_VERSION(2,6,36)
-								g_add_gtk_key_params.pairwise,
-								#endif
-								g_add_gtk_key_params.mac_addr,
-								(struct key_params *)(&g_key_gtk_params));
-			#endif
-		}
-		#endif
+		dev->ieee80211_ptr->iftype = type;
+		priv->wdev->iftype = type;
+		nic->iftype = GO_MODE;
 		
-		/*BugID_4847: registered frames in firmware are now*/
-		/*lost due to mac close. So re-register those frames*/
-		if(g_linux_wlan->atwilc_initialized)
-		{
-			for(i=0; i<num_reg_frame; i++)
-			{
-				PRINT_D(INIT_DBG,"Frame registering Type: %x - Reg: %d\n", nic->g_struct_frame_reg[i].frame_type, 
-																		nic->g_struct_frame_reg[i].reg);
-				host_int_frame_register(priv->hATWILCWFIDrv,
-										nic->g_struct_frame_reg[i].frame_type,
-										nic->g_struct_frame_reg[i].reg);
-			}
-		}
-		#endif
-		#endif	
+		bEnablePS = ATL_FALSE;
+		host_int_set_power_mgmt(priv->hATWILCWFIDrv, 0, 0);
+
+		/*TicketId1092*/
+		/*Disable coex mode when connecting P2P*/
+		#ifdef ATWILC_BT_COEXISTENCE
+		host_int_change_bt_coex_mode(priv->hATWILCWFIDrv, COEX_FORCE_WIFI);
+		#endif /*ATWILC_BT_COEXISTENCE*/
+		
 		break;
 		
 	default:
@@ -3791,8 +3536,10 @@ static int ATWILC_WFI_start_ap(struct wiphy *wiphy, struct net_device *dev,
 {
 	struct cfg80211_beacon_data* beacon = &(settings->beacon);
 	struct ATWILC_WFI_priv* priv;
+	perInterface_wlan_t* nic;
 	ATL_Sint32 s32Error = ATL_SUCCESS;
-	
+
+	nic = netdev_priv(dev);
 	priv = wiphy_priv(wiphy);
 	PRINT_D(HOSTAPD_DBG,"Starting ap\n");
 
@@ -3806,7 +3553,12 @@ static int ATWILC_WFI_start_ap(struct wiphy *wiphy, struct net_device *dev,
 		PRINT_ER("Error in setting channel\n");
 #endif
 
-	linux_wlan_set_bssid(dev,g_linux_wlan->strInterfaceInfo[0].aSrcAddress);
+	/*TicketId883*/
+	/*In GO mode, AP starts on P2P interface, While in AP mode it starts on WLAN interface*/
+	if(nic->iftype == GO_MODE)
+		linux_wlan_set_bssid(dev,g_linux_wlan->strInterfaceInfo[1].aSrcAddress);
+	else
+		linux_wlan_set_bssid(dev,g_linux_wlan->strInterfaceInfo[0].aSrcAddress);
 	
 	#ifndef ATWILC_FULLY_HOSTING_AP
 	s32Error = host_int_add_beacon(	priv->hATWILCWFIDrv,
@@ -3920,17 +3672,22 @@ static int  ATWILC_WFI_stop_ap(struct wiphy *wiphy, struct net_device *dev)
 static int ATWILC_WFI_add_beacon(struct wiphy *wiphy, struct net_device *dev,
 	struct beacon_parameters *info)
 {
-	ATL_Sint32 s32Error = ATL_SUCCESS;
 	struct ATWILC_WFI_priv* priv;
+	perInterface_wlan_t* nic;
+	ATL_Sint32 s32Error = ATL_SUCCESS;
 
-	
-
+	nic = netdev_priv(dev);
 	priv = wiphy_priv(wiphy);
 	PRINT_D(HOSTAPD_DBG,"Adding Beacon\n");
 
 	PRINT_D(HOSTAPD_DBG,"Interval = %d \n DTIM period = %d\n Head length = %d Tail length = %d\n",info->interval , info->dtim_period,info->head_len,info->tail_len );
 
-	linux_wlan_set_bssid(dev,g_linux_wlan->strInterfaceInfo[0].aSrcAddress);
+	/*TicketId883*/
+	/*In GO mode, AP starts on P2P interface, While in AP mode it starts on WLAN interface*/
+	if(nic->iftype == GO_MODE)
+		linux_wlan_set_bssid(dev,g_linux_wlan->strInterfaceInfo[1].aSrcAddress);
+	else
+		linux_wlan_set_bssid(dev,g_linux_wlan->strInterfaceInfo[0].aSrcAddress);
 
 	#ifndef ATWILC_FULLY_HOSTING_AP
 	s32Error = host_int_add_beacon(priv->hATWILCWFIDrv, info->interval,
@@ -4330,7 +4087,27 @@ int ATWILC_WFI_del_virt_intf(struct wiphy *wiphy,struct net_device *dev)
 		return ATL_SUCCESS;
 }
 
+uint8_t u8SuspendOnEvent = 0;
+int ATWILC_WFI_suspend(struct wiphy *wiphy, struct cfg80211_wowlan *wow)
+{
+	if(linux_wlan_get_num_conn_ifcs() != 0)
+		u8SuspendOnEvent = 1;
+	
+	return 0;
+}
+int ATWILC_WFI_resume(struct wiphy *wiphy)
+{
+	return 0;
+}
 
+void	ATWILC_WFI_wake_up(struct wiphy *wiphy, bool enabled)
+{
+}
+
+int	ATWILC_WFI_get_u8SuspendOnEvent_value(void)
+{
+	return u8SuspendOnEvent;
+}
 
 #endif /*ATWILC_AP_EXTERNAL_MLME*/
 static struct cfg80211_ops ATWILC_WFI_cfg80211_ops = {
@@ -4406,6 +4183,11 @@ static struct cfg80211_ops ATWILC_WFI_cfg80211_ops = {
 	//.mgmt_tx_cancel_wait = ATWILC_WFI_mgmt_tx_cancel_wait,
 	.set_power_mgmt = ATWILC_WFI_set_power_mgmt,
 	.set_cqm_rssi_config = ATWILC_WFI_set_cqm_rssi_config,
+#endif
+	.suspend = ATWILC_WFI_suspend,
+	.resume = ATWILC_WFI_resume,
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3,5,0)
+	.set_wakeup = ATWILC_WFI_wake_up,
 #endif
 	
 };

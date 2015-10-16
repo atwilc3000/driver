@@ -590,9 +590,9 @@ _fail_:
 
 ********************************************/
 
-static int sdio_deinit(void *pv)
+int sdio_deinit(void *pv)
 {
-#if defined(RESCAN_SDIO) || defined(PLAT_ALLWINNER_A31)
+
 	sdio_cmd52_t cmd;
 	
 	printk("De Init SDIO\n");	
@@ -601,15 +601,13 @@ static int sdio_deinit(void *pv)
 	**/
 	cmd.read_write = 1;
 	cmd.function = 0;
-	cmd.raw = 1;
+	cmd.raw = 0;
 	cmd.address = 0x6;
 	cmd.data = 0x8;
 	if (!g_sdio.sdio_cmd52(&cmd)) {
 		g_sdio.dPrint(N_ERR, "[atwilc sdio]: Fail cmd 52, reset cmd ...\n");
 			}
-#endif
-
-	return 1;	
+	return 1;              
 }
 
 static int sdio_sync(void)
@@ -670,28 +668,32 @@ static int sdio_sync(void)
 	return 1;
 }
 
-static int sdio_init(atwilc_wlan_inp_t *inp, atwilc_debug_func func)
+ int sdio_init(atwilc_wlan_inp_t *inp, atwilc_debug_func func)
 {
 	sdio_cmd52_t cmd;
 	int loop;
 	uint32_t chipid;
-	memset(&g_sdio, 0, sizeof(atwilc_sdio_t));
+	
+	if(inp != NULL)
+	{
+		memset(&g_sdio, 0, sizeof(atwilc_sdio_t));
 
-	g_sdio.dPrint = func;
-	g_sdio.os_context = inp->os_context.os_private;
-	memcpy((void *)&g_sdio.os_func, (void *)&inp->os_func, sizeof(atwilc_wlan_os_func_t));
+		g_sdio.dPrint = func;
+		g_sdio.os_context = inp->os_context.os_private;
+		memcpy((void *)&g_sdio.os_func, (void *)&inp->os_func, sizeof(atwilc_wlan_os_func_t));
 
-	if (inp->io_func.io_init) {	
-		if (!inp->io_func.io_init(g_sdio.os_context)) {
-			g_sdio.dPrint(N_ERR, "[atwilc sdio]: Failed io init bus...\n");
+		if (inp->io_func.io_init) {	
+			if (!inp->io_func.io_init(g_sdio.os_context)) {
+				g_sdio.dPrint(N_ERR, "[atwilc sdio]: Failed io init bus...\n");
+				return 0;
+				}
+			} else {
 			return 0;
 		}
-	} else {
-		return 0;
-	}
 
-	g_sdio.sdio_cmd52 	= inp->io_func.u.sdio.sdio_cmd52;
-	g_sdio.sdio_cmd53 	= inp->io_func.u.sdio.sdio_cmd53;
+		g_sdio.sdio_cmd52 	= inp->io_func.u.sdio.sdio_cmd52;
+		g_sdio.sdio_cmd53 	= inp->io_func.u.sdio.sdio_cmd53;
+	}
 	/**
 		function 0 csa enable 
 	**/
@@ -774,13 +776,16 @@ static int sdio_init(atwilc_wlan_inp_t *inp, atwilc_debug_func func)
 	/**
 		make sure can read back chip id correctly
 	**/
-	if (!sdio_read_reg(0x3b0000, &chipid)) {
-		g_sdio.dPrint(N_ERR, "[atwilc sdio]: Fail cmd read chip id...\n");
-		goto _fail_;
+	if(inp != NULL)
+	{
+		if (!sdio_read_reg(0x3b0000, &chipid)) {
+			g_sdio.dPrint(N_ERR, "[atwilc sdio]: Fail cmd read chip id...\n");
+			goto _fail_;
+		}
+		g_sdio.dPrint(N_ERR, "[atwilc sdio]: chipid (%08x)\n", chipid);
+		g_sdio.has_thrpt_enh3 = 1;
+		g_sdio.dPrint(N_ERR, "[atwilc sdio]: has_thrpt_enh3 = %d...\n", g_sdio.has_thrpt_enh3);
 	}
-	g_sdio.dPrint(N_ERR, "[atwilc sdio]: chipid (%08x)\n", chipid);
-	g_sdio.has_thrpt_enh3 = 1;
-	g_sdio.dPrint(N_ERR, "[atwilc sdio]: has_thrpt_enh3 = %d...\n", g_sdio.has_thrpt_enh3);
 
 	int_clrd = 0;
 

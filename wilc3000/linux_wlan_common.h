@@ -135,4 +135,6 @@ extern atomic_t DEBUG_LEVEL;
 	
 
 void linux_wlan_enable_irq(void);
+int linux_wlan_get_num_conn_ifcs(void);
+
 #endif

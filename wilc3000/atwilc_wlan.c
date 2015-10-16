@@ -25,7 +25,6 @@ extern void ATWILC_WFI_mgmt_rx(uint8_t *buff, uint32_t size);
 extern void frmw_to_linux(uint8_t *buff, uint32_t size);
 int sdio_xfer_cnt(void);
 uint32_t atwilc_get_chipid(uint8_t update);
-ATL_Uint16 Set_machw_change_vir_if(ATL_Bool bValue);
 
 //static uint32_t vmm_table[ATWILC_VMM_TBL_SIZE];
 //static uint32_t vmm_table_rbk[ATWILC_VMM_TBL_SIZE];
@@ -755,6 +754,19 @@ void chip_sleep_manually(ATL_Uint32 u32SleepTime , int source)
 
 }
 
+void atwilc_host_sleep_notify( int source)
+{
+	acquire_bus(ACQUIRE_ONLY,source);
+	g_wlan.hif_func.hif_write_reg(0x10bc, 1);
+	release_bus(RELEASE_ONLY,source);
+}
+void atwilc_host_wakeup_notify(int source)
+{
+	acquire_bus(ACQUIRE_ONLY,source);
+	g_wlan.hif_func.hif_write_reg(0x10c0, 1);
+	release_bus(RELEASE_ONLY,source);
+}
+
 
 /********************************************
 
@@ -1373,7 +1385,11 @@ _end_:
 		}
 	}
 #ifdef TCP_ENHANCEMENTS
-	atwilc_wlan_handle_rxq();
+	/* handle rxq only if it was successful reception */
+	if(ret)
+	{
+		atwilc_wlan_handle_rxq();
+	}
 #endif
 }
 
@@ -1428,7 +1444,7 @@ static int atwilc_wlan_firmware_download(const uint8_t *buffer, uint32_t buffer_
 	
 	/*TicketId1003*/
 	/* Reset the CPU before changing IRAM*/
-	acquire_bus(ACQUIRE_ONLY,PWR_DEV_SRC_WIFI);
+	acquire_bus(ACQUIRE_AND_WAKEUP, PWR_DEV_SRC_WIFI);
 
 	p->hif_func.hif_read_reg(ATWILC_GLB_RESET_0,&reg);
 	reg &= ~(1ul << 10);			
@@ -1450,7 +1466,7 @@ static int atwilc_wlan_firmware_download(const uint8_t *buffer, uint32_t buffer_
 		addr = BYTE_SWAP(addr);
 		size = BYTE_SWAP(size);
 #endif
-		acquire_bus(ACQUIRE_ONLY,PWR_DEV_SRC_WIFI);
+		acquire_bus(ACQUIRE_AND_WAKEUP, PWR_DEV_SRC_WIFI);
 		offset += 8;		
 		while(((int)size) && (offset < buffer_size)) {
 			if(size <= blksz) {
@@ -1467,7 +1483,7 @@ static int atwilc_wlan_firmware_download(const uint8_t *buffer, uint32_t buffer_
 			offset += size2;
 			size -= size2;			
 		}
-		release_bus(RELEASE_ONLY, PWR_DEV_SRC_WIFI);
+		release_bus(RELEASE_ALLOW_SLEEP, PWR_DEV_SRC_WIFI);
 
 		if (!ret){ 
 			/*EIO	5*/
@@ -1597,7 +1613,7 @@ static int atwilc_wlan_start(void)
 		Set the host interface
 	**/
 #ifdef OLD_FPGA_BITFILE
-	acquire_bus(ACQUIRE_ONLY,PWR_DEV_SRC_WIFI);
+	acquire_bus(ACQUIRE_AND_WAKEUP,PWR_DEV_SRC_WIFI);
 	ret = p->hif_func.hif_read_reg(ATWILC_VMM_CORE_CTL, &reg);
 	if (!ret) {
 		atwilc_debug(N_ERR, "[atwilc start]: fail read reg vmm_core_ctl...\n");
@@ -1608,7 +1624,7 @@ static int atwilc_wlan_start(void)
 	ret = p->hif_func.hif_write_reg(ATWILC_VMM_CORE_CTL, reg);
 	if (!ret) {
 		atwilc_debug(N_ERR, "[atwilc start]: fail write reg vmm_core_ctl...\n");
-		release_bus(RELEASE_ONLY, PWR_DEV_SRC_WIFI);
+		release_bus(RELEASE_ALLOW_SLEEP, PWR_DEV_SRC_WIFI);
  		return ret;
 	}
 #else
@@ -1618,11 +1634,11 @@ static int atwilc_wlan_start(void)
 	} else if (p->io_type == HIF_SPI) {
 		reg = 1;
 	}
-	acquire_bus(ACQUIRE_ONLY,PWR_DEV_SRC_WIFI);
+	acquire_bus(ACQUIRE_AND_WAKEUP,PWR_DEV_SRC_WIFI);
 	ret = p->hif_func.hif_write_reg(ATWILC_VMM_CORE_CFG, reg);
 	if (!ret) {
 		atwilc_debug(N_ERR, "[atwilc start]: fail write reg vmm_core_cfg...\n");
-		release_bus(RELEASE_ONLY, PWR_DEV_SRC_WIFI);
+		release_bus(RELEASE_ALLOW_SLEEP, PWR_DEV_SRC_WIFI);
 		/* EIO  5*/
 		ret = -5;
  		return ret;
@@ -1665,7 +1681,7 @@ static int atwilc_wlan_start(void)
 	ret = p->hif_func.hif_write_reg(ATWILC_GP_REG_1, reg);
 	if (!ret) {
 		atwilc_debug(N_ERR, "[atwilc start]: fail write ATWILC_GP_REG_1 ...\n");
-		release_bus(RELEASE_ONLY, PWR_DEV_SRC_WIFI);
+		release_bus(RELEASE_ALLOW_SLEEP, PWR_DEV_SRC_WIFI);
 		/* EIO  5*/
 		ret = -5;
  		return ret;
@@ -1681,7 +1697,7 @@ static int atwilc_wlan_start(void)
 	ret = p->hif_func.hif_read_reg(0x3b0000, &chipid);
 	if (!ret) {
 		atwilc_debug(N_ERR, "[atwilc start]: fail read reg 0x3b0000 ...\n");
-		release_bus(RELEASE_ONLY, PWR_DEV_SRC_WIFI);
+		release_bus(RELEASE_ALLOW_SLEEP, PWR_DEV_SRC_WIFI);
 		/* EIO  5*/
 		ret = -5;
  		return ret;
@@ -1715,7 +1731,7 @@ static int atwilc_wlan_start(void)
 		g_wlan.initialized = 0;
 	}
 	
-	release_bus(RELEASE_ONLY, PWR_DEV_SRC_WIFI);
+	release_bus(RELEASE_ALLOW_SLEEP, PWR_DEV_SRC_WIFI);
 
 	return (ret<0)?ret:0;
 }
@@ -1726,7 +1742,7 @@ void atwilc_wlan_global_reset(void)
 	atwilc_wlan_dev_t *p = (atwilc_wlan_dev_t *)&g_wlan;
 	acquire_bus(ACQUIRE_AND_WAKEUP,PWR_DEV_SRC_WIFI);
 	p->hif_func.hif_write_reg(ATWILC_GLB_RESET_0,0x0);
-	release_bus(RELEASE_ONLY, PWR_DEV_SRC_WIFI);	
+	release_bus(RELEASE_ALLOW_SLEEP, PWR_DEV_SRC_WIFI);	
 }
 static int atwilc_wlan_stop(void)
 {
@@ -1765,6 +1781,22 @@ static int atwilc_wlan_stop(void)
 	// Stop forcing Wifi and force BT
 	reg &= ~ BIT0;
 	ret = p->hif_func.hif_write_reg(rGLOBAL_MODE_CONTROL, reg);
+	if (!ret) {
+		PRINT_ER("Error while writing reg\n");
+		release_bus(RELEASE_ALLOW_SLEEP, PWR_DEV_SRC_WIFI);
+		return ret;
+	}
+
+	/* Clear Wifi wakeup enable*/
+	ret = p->hif_func.hif_read_reg(rPWR_SEQ_MISC_CTRL, &reg);
+	if (!ret) {
+		PRINT_ER("Error while reading reg\n");
+		release_bus(RELEASE_ALLOW_SLEEP, PWR_DEV_SRC_WIFI);
+		return ret;
+	}
+	// Stop forcing Wifi and force BT
+	reg &= ~ BIT28;
+	ret = p->hif_func.hif_write_reg(rPWR_SEQ_MISC_CTRL, reg);
 	if (!ret) {
 		PRINT_ER("Error while writing reg\n");
 		release_bus(RELEASE_ALLOW_SLEEP, PWR_DEV_SRC_WIFI);
@@ -2097,7 +2129,7 @@ uint32_t init_chip(void)
 	uint32_t reg,ret=0;
 
 
-	acquire_bus(ACQUIRE_ONLY,PWR_DEV_SRC_WIFI);
+	acquire_bus(ACQUIRE_AND_WAKEUP,PWR_DEV_SRC_WIFI);
 	chipid = atwilc_get_chipid(ATL_TRUE);
 
 
@@ -2196,7 +2228,7 @@ uint32_t init_chip(void)
 
 
 end:
-	release_bus(RELEASE_ONLY, PWR_DEV_SRC_WIFI);
+	release_bus(RELEASE_ALLOW_SLEEP, PWR_DEV_SRC_WIFI);
 
 	return ret;
 
@@ -2208,9 +2240,13 @@ uint32_t atwilc_get_chipid(uint8_t update)
 	// SDIO can't read into global variables
 	// Use this variable as a temp, then copy to the global
 	uint32_t tempchipid = 0;
+	int ret;
 	
 	if(chipid == 0 || update != 0) {		
-		g_wlan.hif_func.hif_read_reg(0x3b0000,&tempchipid);
+		ret = g_wlan.hif_func.hif_read_reg(0x3b0000,&tempchipid);
+		if (!ret) {
+			atwilc_debug(N_ERR, "[atwilc start]: fail read reg 0x3b0000 ...\n");
+		}
 		if(!ISATWILC3000(tempchipid)) {
 			chipid = 0;
 			goto _fail_;
@@ -2226,11 +2262,11 @@ uint8_t core_11b_ready(void)
 {	
 	uint32_t reg_val;
 
-	acquire_bus(ACQUIRE_ONLY,PWR_DEV_SRC_WIFI);	
+	acquire_bus(ACQUIRE_AND_WAKEUP,PWR_DEV_SRC_WIFI);	
 	g_wlan.hif_func.hif_write_reg(0x16082c,1);
 	g_wlan.hif_func.hif_write_reg(0x161600,0x90);
 	g_wlan.hif_func.hif_read_reg(0x161600,&reg_val);
-	release_bus(RELEASE_ONLY, PWR_DEV_SRC_WIFI);
+	release_bus(RELEASE_ALLOW_SLEEP, PWR_DEV_SRC_WIFI);
 		
 	if(reg_val == 0x90)
 		return 0;		
@@ -2392,39 +2428,6 @@ _fail_:
 	
 	return ret;
 
-}
-
-ATL_Uint16 Set_machw_change_vir_if(ATL_Bool bValue)
-{
-	ATL_Uint16 ret;
-	ATL_Uint32 reg;
-		
-	/*Reset ATWILC_CHANGING_VIR_IF register to allow adding futrue keys to CE H/W*/
-	(&g_wlan)->os_func.os_enter_cs((&g_wlan)->hif_lock);
-	ret = (&g_wlan)->hif_func.hif_read_reg(ATWILC_CHANGING_VIR_IF, &reg);
-	if (!ret) 
-	{
-		PRINT_ER("Error while Reading reg ATWILC_CHANGING_VIR_IF\n");
-	}
-
-	if(bValue== ATL_TRUE)
-	{
-		reg |= (BIT31);
-	}
-	else
-	{
-		reg &= ~(BIT31);
-	}
-		
-	ret = (&g_wlan)->hif_func.hif_write_reg(ATWILC_CHANGING_VIR_IF, reg);
-			
-	if (!ret) 
-	{
-		PRINT_ER("Error while writing reg ATWILC_CHANGING_VIR_IF\n");
-	}
-	(&g_wlan)->os_func.os_leave_cs((&g_wlan)->hif_lock);
-	
-	return ret;
 }
 
 #ifdef ATWILC_FULLY_HOSTING_AP
