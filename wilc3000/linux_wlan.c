@@ -99,6 +99,8 @@ struct linux_wlan *g_linux_wlan = NULL;
 struct wilc_wlan_oup *gpstrWlanOps;
 bool bEnablePS = true;
 
+extern struct WILC_WFIDrv *wfidrv_list[NUM_CONCURRENT_IFC + 1]; 
+	
 volatile int gbCrashRecover = 0;
 volatile int g_bWaitForRecovery = 0;
 
@@ -1013,7 +1015,7 @@ static int linux_wlan_init_test_config(struct net_device *dev, struct linux_wlan
 	}
 
 	*(int *)c_val = (unsigned int)nic->iftype;
-
+	
 	if (!g_linux_wlan->oup.wlan_cfg_set(1, WID_SET_OPERATION_MODE, c_val,
 					    4, 0, 0))
 		goto _fail_;
@@ -1271,6 +1273,7 @@ static int linux_wlan_init_test_config(struct net_device *dev, struct linux_wlan
 	}
 #endif /* WILC_BT_COEXISTENCE */
 	c_val[0] = 1; /* Enable N with immediate block ack. */
+	/* changed from zero to 1 */
 	if (!g_linux_wlan->oup.wlan_cfg_set(0, WID_11N_IMMEDIATE_BA_ENABLED, c_val, 1, 1,0))
 		goto _fail_;
 	return 0;
@@ -2340,6 +2343,11 @@ int wilc_netdev_init(void)
 	g_linux_wlan = kmalloc(sizeof(struct linux_wlan), GFP_ATOMIC);
 	memset(g_linux_wlan, 0, sizeof(struct linux_wlan));
 
+	for(i = 1; i < ARRAY_SIZE(wfidrv_list); i++)
+	{
+		wfidrv_list[i] = NULL;
+	}
+	
 	/*create the common structure*/
 	/*Reset interrupt count debug*/
 	int_rcvdU = 0;

@@ -92,6 +92,7 @@ typedef enum{
 /* Not including the rates field cause it has variable length*/
 #define WILC_ADD_STA_LENGTH	40
 #define SCAN_EVENT_DONE_ABORTED
+#define NUM_CONCURRENT_IFC 2
 
 #define WILC_MULTICAST_TABLE_SIZE	8
 
@@ -390,6 +391,7 @@ struct WILC_WFIDrv {
 	#endif
 
 	bool IFC_UP;
+	int driver_handler_id;
 };
 
 /*
@@ -763,12 +765,6 @@ signed int host_int_setup_ipaddress(struct WFIDrvHandle *hWFIDrv,
  */
 signed int host_int_delBASession(struct WFIDrvHandle *hWFIDrv,
 				 char *pBSSID, char TID);
-
-/*
- * Delete all Rx BA session
- */
-signed int host_int_del_All_Rx_BASession(struct WFIDrvHandle *hWFIDrv,
-					 char *pBSSID, char TID);
 
 /*
  * get IP address on firmware

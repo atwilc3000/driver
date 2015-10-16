@@ -182,8 +182,6 @@ struct frame_reg {
 	bool reg;
 };
 
-#define NUM_CONCURRENT_IFC	2
-
 struct InterfaceInfo {
 	uint8_t aSrcAddress[ETH_ALEN];
 	uint8_t aBSSID[ETH_ALEN];
