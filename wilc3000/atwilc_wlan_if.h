@@ -715,7 +715,9 @@ typedef enum {
 	WID_DEL_BEACON					= 0x00CA,
 #endif
 
-	WID_LOGTerminal_Switch					= 0x00CD,
+	WID_LOGTerminal_Switch              = 0x00CD,
+	WID_TX_POWER						= 0x00CE,
+	
 	/* EMAC Short WID list */
     /*  RTS Threshold                                                        */
     /*  --------------------------------------------------------------       */

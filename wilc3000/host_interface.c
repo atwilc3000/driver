@@ -63,6 +63,8 @@ extern ATL_Uint8 g_atwilc_initialized;
 #endif
 
 #define HOST_IF_MSG_SEND_BUFFERED_EAP	((ATL_Uint16)39)
+#define HOST_IF_MSG_SET_TX_POWER	((ATL_Uint16)40)
+#define HOST_IF_MSG_GET_TX_POWER	((ATL_Uint16)41)
 
 #define HOST_IF_MSG_EXIT					((ATL_Uint16)100)
 
@@ -463,6 +465,11 @@ typedef struct
 	ATL_Uint8 mac[6];
 
 }tstrHostIfStaInactiveT;
+
+typedef struct 
+{
+	ATL_Uint8 u8TxPwr;
+}tstrHostIFTxPwr;
 /**/
 /*!
 *  @union 		tuniHostIFmsgBody
@@ -510,6 +517,8 @@ typedef union _tuniHostIFmsgBody
 	tstrHostIFBTCoexMode	strHostIfBTMode;
 #endif
 	tstrHostIFSendBufferedEAP strHostIFSendBufferedEAP;
+	tstrHostIFTxPwr strHostIFTxPwr;
+
 } tuniHostIFmsgBody;
 
 /*!
@@ -4865,6 +4874,56 @@ static ATL_Sint32 Handle_DelAllRxBASessions(void * drvHandler, tstrHostIfBASessi
 
 }
 
+
+static ATL_Sint32 Handle_SetTxPwr(void * drvHandler, ATL_Uint8 u8TxPwr)
+{	
+	ATL_Sint32 s32Error = ATL_SUCCESS;
+	tstrWID strWID;
+	tstrATWILC_WFIDrv * pstrWFIDrv = (tstrATWILC_WFIDrv *)drvHandler;
+
+	strWID.u16WIDid = (ATL_Uint16)WID_TX_POWER;
+	strWID.enuWIDtype = WID_CHAR;
+	strWID.ps8WidVal = (ATL_Sint8*)&u8TxPwr;
+	strWID.s32ValueSize = sizeof(ATL_Char);	
+
+	s32Error = SendConfigPkt(SET_CFG, &strWID, 1, ATL_TRUE,(ATL_Uint32)pstrWFIDrv);
+
+	if(s32Error)
+	{
+		PRINT_D(HOSTINF_DBG,"Failed to switch log terminal\n");
+		ATL_ERRORREPORT(s32Error,ATL_INVALID_STATE);
+	}
+
+	ATL_CATCH(s32Error)
+	{
+
+	}
+
+	return s32Error;
+}
+
+static ATL_Sint32 Handle_GetTxPwr(void * drvHandler, ATL_Uint8* pu8TxPwr)
+{
+	ATL_Sint32 s32Error = ATL_SUCCESS;
+	tstrWID strWID;
+	tstrATWILC_WFIDrv * pstrWFIDrv = (tstrATWILC_WFIDrv *)drvHandler;
+	
+	strWID.u16WIDid = WID_TX_POWER;
+	strWID.enuWIDtype= WID_CHAR;
+	strWID.s32ValueSize = sizeof(ATL_Char);
+	strWID.ps8WidVal = (ATL_Sint8*)(pu8TxPwr);
+
+	s32Error = SendConfigPkt(GET_CFG, &strWID, 1, ATL_TRUE,(ATL_Uint32)pstrWFIDrv);
+		
+	if(s32Error)
+	{
+		PRINT_ER("Failed to send scan paramters config packet\n");
+		//ATL_ERRORREPORT(s32Error, s32Error);
+	}
+	ATL_SemaphoreRelease(&hWaitResponse, NULL);
+	return s32Error; 
+}
+
 /**
 *  @brief hostIFthread
 *  @details 	    Main thread to handle message queue requests 
@@ -5163,6 +5222,18 @@ static void hostIFthread(void* pvArg)
 			case HOST_IF_MSG_SEND_BUFFERED_EAP:
 			{
 				Handle_SendBufferedEAP(strHostIFmsg.drvHandler,&strHostIFmsg.uniHostIFmsgBody.strHostIFSendBufferedEAP);
+				break;
+			}
+
+			case HOST_IF_MSG_SET_TX_POWER:
+			{
+				Handle_SetTxPwr(strHostIFmsg.drvHandler,strHostIFmsg.uniHostIFmsgBody.strHostIFTxPwr.u8TxPwr);
+				break;
+			}
+
+			case HOST_IF_MSG_GET_TX_POWER:
+			{
+				Handle_GetTxPwr(strHostIFmsg.drvHandler,&strHostIFmsg.uniHostIFmsgBody.strHostIFTxPwr.u8TxPwr);
 				break;
 			}
 
@@ -8949,3 +9020,57 @@ ATL_Sint32 host_int_get_ipaddress(ATWILC_WFIDrvHandle hWFIDrv, ATL_Uint8* u16ipa
 
 }
 
+ATL_Sint32 host_int_set_tx_power(ATWILC_WFIDrvHandle hWFIDrv, ATL_Uint8 tx_power)
+{
+	ATL_Sint32 s32Error = ATL_SUCCESS;
+	tstrATWILC_WFIDrv * pstrWFIDrv = (tstrATWILC_WFIDrv *)hWFIDrv;
+	tstrHostIFmsg strHostIFmsg;
+
+	if(pstrWFIDrv == ATL_NULL )
+	{
+		ATL_ERRORREPORT(s32Error,ATL_INVALID_ARGUMENT);
+	}
+
+	/* prepare the Key Message */
+	ATL_memset(&strHostIFmsg, 0, sizeof(tstrHostIFmsg));
+
+	strHostIFmsg.u16MsgId = HOST_IF_MSG_SET_TX_POWER;
+	strHostIFmsg.uniHostIFmsgBody.strHostIFTxPwr.u8TxPwr = tx_power;
+	strHostIFmsg.drvHandler=hWFIDrv;
+
+	/* send the message */
+	s32Error = ATL_MsgQueueSend(&gMsgQHostIF, &strHostIFmsg, sizeof(tstrHostIFmsg), ATL_NULL);
+	if(s32Error)
+		PRINT_ER(" Error in sending messagequeue: PMKID Info\n");
+
+	ATL_CATCH(s32Error)
+	{
+
+	}
+
+	return s32Error;
+}
+
+ATL_Sint32 host_int_get_tx_power(ATWILC_WFIDrvHandle hWFIDrv, ATL_Uint8 *tx_power)
+{
+	ATL_Sint32 s32Error = ATL_SUCCESS;	
+	tstrHostIFmsg strHostIFmsg;
+
+	
+	/* prepare the Get RSSI Message */
+	ATL_memset(&strHostIFmsg, 0, sizeof(tstrHostIFmsg));
+
+	strHostIFmsg.u16MsgId = HOST_IF_MSG_GET_TX_POWER;
+	strHostIFmsg.drvHandler=hWFIDrv;
+	/* send the message */
+	s32Error = 	ATL_MsgQueueSend(&gMsgQHostIF, &strHostIFmsg, sizeof(tstrHostIFmsg), ATL_NULL);
+	if(s32Error){
+		PRINT_ER("Failed to send get host channel param's message queue ");
+		return ATL_FAIL;
+		}
+
+	ATL_SemaphoreAcquire(&hWaitResponse, NULL);	
+
+	*tx_power = strHostIFmsg.uniHostIFmsgBody.strHostIFTxPwr.u8TxPwr;
+	return s32Error;
+}

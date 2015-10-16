@@ -77,16 +77,8 @@ static struct notifier_block g_dev_notifier = {
 								        	g_linux_wlan->oup.wlan_cleanup()
 
 /* definitions in Makefile */
-#ifndef STA_FIRMWARE
-#define STA_FIRMWARE	"wifi_firmware.bin"
-#endif
-
-#ifndef AP_FIRMWARE
-#define AP_FIRMWARE		"wifi_firmware_ap.bin"
-#endif
-
-#ifndef P2P_CONCURRENCY_FIRMWARE
-#define P2P_CONCURRENCY_FIRMWARE	"wifi_firmware_p2p_concurrency.bin"
+#ifndef WIFI_FIRMWARE
+#define WIFI_FIRMWARE	"wifi_firmware.bin"
 #endif
 
 #ifdef DOWNLOAD_BT_FW
@@ -261,6 +253,8 @@ static int DebuggingThreadTask(void* vp)
 
 			if(bDebugThreadRunning)
 			{
+				printk("*** Debug Thread Running ***\n");
+				
 				if(cfg_timed_out_cnt >= 5)
 				{
 					cfg_timed_out_cnt = 0;					
@@ -443,11 +437,13 @@ static int dev_state_ev_handler(struct notifier_block *this, unsigned long event
 				pstrWFIDrv->IFC_UP=1;
 				g_obtainingIP=ATL_FALSE;
 				ATL_TimerStop(&hDuringIpTimer, ATL_NULL);
+				
+				if(bEnablePS	== ATL_TRUE)
+					host_int_set_power_mgmt((ATWILC_WFIDrvHandle)pstrWFIDrv, 1, 0);
+				
 				PRINT_D(GENERIC_DBG,"IP obtained , enable scan\n");
 			}
 
-			if(bEnablePS	== ATL_TRUE)
-			  	host_int_set_power_mgmt((ATWILC_WFIDrvHandle)pstrWFIDrv, 1, 0);
 
                 	PRINT_D(GENERIC_DBG, "[%s] Up IP\n", dev_iface->ifa_label);
 
@@ -989,21 +985,7 @@ int linux_wlan_get_firmware(perInterface_wlan_t* p_nic){
 	const struct firmware* atwilc_bt_firmware;
 #endif
 	char *firmware;
-	
-
-	if(nic->iftype == AP_MODE)
-		firmware = AP_FIRMWARE;
-	else if(nic->iftype == STATION_MODE)
-		firmware = STA_FIRMWARE;
-
-	/*BugID_5137*/
-	else
-	{
-		PRINT_D(INIT_DBG,"Get P2P_CONCURRENCY_FIRMWARE\n");
-		firmware = P2P_CONCURRENCY_FIRMWARE;
-	}
-	
-
+	firmware = WIFI_FIRMWARE;
 	
 	if(nic == NULL){
 		PRINT_ER("NIC is NULL\n");
@@ -1173,6 +1155,9 @@ static int linux_wlan_init_test_config(struct net_device *dev, linux_wlan_t* p_n
 	/*BugID_5077*/
 	struct ATWILC_WFI_priv *priv;
 	tstrATWILC_WFIDrv * pstrWFIDrv;
+	perInterface_wlan_t* nic;
+
+	nic = netdev_priv(dev);
 	
 	PRINT_D(TX_DBG,"Start configuring Firmware\n");
 
@@ -1190,6 +1175,10 @@ static int linux_wlan_init_test_config(struct net_device *dev, linux_wlan_t* p_n
 		printk("Null p[ointer\n");
 		goto _fail_;
 	}
+
+	*((int *)c_val) = (uint32_t)nic->iftype;
+	if (!g_linux_wlan->oup.wlan_cfg_set(1, WID_SET_OPERATION_MODE, c_val, 4, 0,0))
+		goto _fail_;
 	
 	/*to tell fw that we are going to use PC test - ATWILC specific*/
 	c_val[0] = 0;
@@ -1420,14 +1409,20 @@ static int linux_wlan_init_test_config(struct net_device *dev, linux_wlan_t* p_n
 	if (!g_linux_wlan->oup.wlan_cfg_set(0, WID_11N_CURRENT_TX_MCS, c_val, 1, 0, 0))
 		goto _fail_;
 
+	#ifdef ATWILC_BT_COEXISTENCE
+	/*TicketId842*/
+	/*If Hostspot is turning on,  set COEX_FORCE_WIFI mode.*/
+	if(nic->iftype == AP_MODE)
+	{
+		c_val[0] = COEX_FORCE_WIFI; /* Disable coexistence in the initialization */
+		if (!g_linux_wlan->oup.wlan_cfg_set(0, WID_BT_COEX_MODE, c_val, 1, 0, 0))
+			goto _fail_;
+	}
+	#endif
+
 	c_val[0] = 1; /* Enable N with immediate block ack. */
-	if (!g_linux_wlan->oup.wlan_cfg_set(0, WID_11N_IMMEDIATE_BA_ENABLED, c_val, 1, 1,(ATL_Uint32)pstrWFIDrv))
+	if (!g_linux_wlan->oup.wlan_cfg_set(0, WID_11N_IMMEDIATE_BA_ENABLED, c_val, 1, 1,0))
 		goto _fail_;
-#ifdef ATWILC_BT_COEXISTENCE
-	c_val[0] = 0; /* Disable coexistence in the initialization */
-	if (!g_linux_wlan->oup.wlan_cfg_set(0, WID_BT_COEX_MODE, c_val, 1, 0, 0))
-		goto _fail_;
-#endif
 
 	return 0;
 

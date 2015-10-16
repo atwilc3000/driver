@@ -1409,6 +1409,9 @@ void host_int_freeJoinParams(void* pJoinParams);
 
 ATL_Sint32 host_int_get_statistics(ATWILC_WFIDrvHandle hWFIDrv, tstrStatistics* pstrStatistics);
 
+ATL_Sint32 host_int_set_tx_power(ATWILC_WFIDrvHandle hWFIDrv, ATL_Uint8 tx_power);
+
+ATL_Sint32 host_int_get_tx_power(ATWILC_WFIDrvHandle hWFIDrv, ATL_Uint8* tx_power);
 /*****************************************************************************/
 /*																			 */
 /*									EOF										 */

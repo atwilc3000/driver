@@ -21,6 +21,7 @@ extern unsigned int int_clrd;
 extern atwilc_hif_func_t hif_sdio;
 extern atwilc_hif_func_t hif_spi;
 extern atwilc_cfg_func_t mac_cfg;
+extern uint32_t cfg_timed_out_cnt;
 extern void ATWILC_WFI_mgmt_rx(uint8_t *buff, uint32_t size);
 extern void frmw_to_linux(uint8_t *buff, uint32_t size);
 int sdio_xfer_cnt(void);
@@ -328,22 +329,27 @@ static int inline Init_TCP_tracking(void)
 }
 static int inline add_TCP_track_session(uint32_t src_prt,uint32_t dst_prt,uint32_t seq)
 {
-	Acks_keep_track_info[Opened_TCP_session].Ack_seq_num=seq;
-	Acks_keep_track_info[Opened_TCP_session].Bigger_Ack_num=0;
-	Acks_keep_track_info[Opened_TCP_session].src_port=src_prt;
-	Acks_keep_track_info[Opened_TCP_session].dst_port=dst_prt;
-	Opened_TCP_session++;
+	if(Opened_TCP_session < (2*MAX_TCP_SESSION))
+	{
+		Acks_keep_track_info[Opened_TCP_session].Ack_seq_num=seq;
+		Acks_keep_track_info[Opened_TCP_session].Bigger_Ack_num=0;
+		Acks_keep_track_info[Opened_TCP_session].src_port=src_prt;
+		Acks_keep_track_info[Opened_TCP_session].dst_port=dst_prt;
+		Opened_TCP_session++;
 
-	PRINT_D(TCP_ENH,"TCP Session %d to Ack %d\n",Opened_TCP_session,seq);
+		PRINT_D(TCP_ENH,"TCP Session %d to Ack %d\n",Opened_TCP_session,seq);
+	}
 	return 0;
 }
 
 static int inline Update_TCP_track_session(uint32_t index,uint32_t Ack)
 {
-	
-	if(Ack>Acks_keep_track_info[index].Bigger_Ack_num)
+	if(index < (2*MAX_TCP_SESSION))
 	{
-		Acks_keep_track_info[index].Bigger_Ack_num=Ack;
+		if(Ack>Acks_keep_track_info[index].Bigger_Ack_num)
+		{		
+			Acks_keep_track_info[index].Bigger_Ack_num=Ack;
+		}
 	}
 	return 0;
 	
@@ -351,7 +357,7 @@ static int inline Update_TCP_track_session(uint32_t index,uint32_t Ack)
 static int inline add_TCP_Pending_Ack(uint32_t Ack,uint32_t Session_index,struct txq_entry_t  * txqe)
 {
 	Statisitcs_totalAcks++;
-	if(Pending_Acks<MAX_PENDING_ACKS)
+	if((PendingAcks_arrBase+Pending_Acks)<MAX_PENDING_ACKS)
 	{
 		Pending_Acks_info[PendingAcks_arrBase+Pending_Acks].ack_num=Ack;
 		Pending_Acks_info[PendingAcks_arrBase+Pending_Acks].txqe=txqe;
@@ -414,7 +420,7 @@ static int inline tcp_process(struct txq_entry_t * tqe)
 				
 				for(i=0;i<Opened_TCP_session;i++)
 				{	
-					if(Acks_keep_track_info[i].Ack_seq_num == seq_no)
+					if((i < (2* MAX_TCP_SESSION)) && (Acks_keep_track_info[i].Ack_seq_num == seq_no))
 					{
 						Update_TCP_track_session(i,Ack_no);
 						break;
@@ -449,6 +455,11 @@ static int atwilc_wlan_txq_filter_dup_tcp_ack(void)
 
 	p->os_func.os_spin_lock(p->txq_spinlock, &p->txq_spinlock_flags);
 	for(i=PendingAcks_arrBase;i<(PendingAcks_arrBase+Pending_Acks);i++) {
+		if((i >= MAX_PENDING_ACKS) || (Pending_Acks_info[i].Session_index >= (2*MAX_TCP_SESSION)))
+		{
+			//printk("error [%d] [%d]\n",i,Pending_Acks_info[i].Session_index);
+			break;
+		}
 		if(Pending_Acks_info[i].ack_num < Acks_keep_track_info[Pending_Acks_info[i].Session_index].Bigger_Ack_num) {
 			struct txq_entry_t *tqe;
 			PRINT_D(TCP_ENH, "DROP ACK: %u \n", Pending_Acks_info[i].ack_num);
@@ -1072,7 +1083,8 @@ static int atwilc_wlan_handle_txq(uint32_t* pu32TxqCount)
 				#ifdef TCP_ACK_FILTER
 				if(tqe->tcp_PendingAck_index != NOT_TCP_ACK)
 				{
-					Pending_Acks_info[tqe->tcp_PendingAck_index].txqe=NULL;
+					if(tqe->tcp_PendingAck_index < MAX_PENDING_ACKS) 
+						Pending_Acks_info[tqe->tcp_PendingAck_index].txqe=NULL;
 				}
 				#endif
 				p->os_func.os_free(tqe);
@@ -1116,6 +1128,8 @@ _end_:
 	PRINT_D(TX_DBG,"THREAD: Exiting txq\n");
 	//return tx[]q count
 	*pu32TxqCount = p->txq_entries;
+	if(ret == 1)
+		cfg_timed_out_cnt = 0;
 	return ret;
 }
 

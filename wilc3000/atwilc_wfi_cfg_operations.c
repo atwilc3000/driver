@@ -3425,47 +3425,16 @@ static int ATWILC_WFI_change_virt_intf(struct wiphy *wiphy,struct net_device *de
 		break;
 
 	case NL80211_IFTYPE_AP:
-		//connecting = 1;
-		bEnablePS = ATL_FALSE;
-		PRINT_D(HOSTAPD_DBG,"Interface type = NL80211_IFTYPE_AP %d\n", type);
-		//linux_wlan_set_bssid(dev,g_linux_wlan->strInterfaceInfo[0].aSrcAddress);
-		//mon_priv = netdev_priv(dev);
-		//mon_priv->real_ndev = dev;
+		PRINT_D(HOSTAPD_DBG,"Interface type = NL80211_IFTYPE_AP\n");
+
 		dev->ieee80211_ptr->iftype = type;
 		priv->wdev->iftype = type;
 		nic->iftype = AP_MODE;
-		printk("(ATL_Uint32)priv->hATWILCWFIDrv[%x]\n",(ATL_Uint32)priv->hATWILCWFIDrv);
-		
-		#ifndef SIMULATION
-		PRINT_D(HOSTAPD_DBG,"Downloading AP firmware\n");
-		linux_wlan_get_firmware(nic);
-		#ifdef ATWILC_P2P
-		/*If atwilc is running, then close-open to actually get new firmware running (serves P2P)*/
-		if(g_linux_wlan->atwilc_initialized)
-		{
-			nic->iftype = AP_MODE;
-			g_linux_wlan->atwilc_initialized = 1;
-			mac_close(dev);
-			mac_open(dev);
-			
-			//atwilc_wlan_deinit(g_linux_wlan);
-			//atwilc_wlan_init(dev,nic);
-			//repeat_power_cycle(nic);
-			//nic->iftype = STATION_MODE;
 
-			/*BugID_4847: registered frames in firmware are now lost
-			   due to mac close. So re-register those frames */
-			for(i=0; i<num_reg_frame; i++)
-			{
-				PRINT_D(INIT_DBG,"Frame registering Type: %x - Reg: %d\n", nic->g_struct_frame_reg[i].frame_type, 
-																		nic->g_struct_frame_reg[i].reg);
-				host_int_frame_register(priv->hATWILCWFIDrv,
-										nic->g_struct_frame_reg[i].frame_type,
-										nic->g_struct_frame_reg[i].reg);
-			}
-		}
-		#endif
-		#endif
+		/*TicketId842*/
+		/*Never use any configuration WIDs here since WILC is not initialized yet.*/
+		/*Hostapd changes and adds virtual interface before calling mac_open().*/
+
 		break;
 		
 	case NL80211_IFTYPE_P2P_GO:
@@ -4109,6 +4078,32 @@ int	ATWILC_WFI_get_u8SuspendOnEvent_value(void)
 	return u8SuspendOnEvent;
 }
 
+int WILC_WFI_set_tx_power(struct wiphy *wiphy, struct wireless_dev *wdev,
+                                 enum nl80211_tx_power_setting type, int mbm)
+{
+	ATL_Sint32 s32Error = ATL_SUCCESS;
+	ATL_Uint8 tx_power = MBM_TO_DBM(mbm);
+	struct ATWILC_WFI_priv* priv = wiphy_priv(wiphy);
+	
+	PRINT_D(CFG80211_DBG, "Setting tx power to %d\n", tx_power);
+
+	s32Error = host_int_set_tx_power(priv->hATWILCWFIDrv, tx_power);
+
+	return s32Error;
+}
+int WILC_WFI_get_tx_power(struct wiphy *wiphy, struct wireless_dev *wdev,
+                                 int *dbm)
+{
+	ATL_Sint32 s32Error = ATL_SUCCESS;
+	struct ATWILC_WFI_priv* priv = wiphy_priv(wiphy);
+
+	s32Error = host_int_get_tx_power(priv->hATWILCWFIDrv, (ATL_Uint8*)(dbm));
+	PRINT_D(CFG80211_DBG, "Got tx power %d\n", *dbm);
+
+	return s32Error;
+}
+
+
 #endif /*ATWILC_AP_EXTERNAL_MLME*/
 static struct cfg80211_ops ATWILC_WFI_cfg80211_ops = {
 
@@ -4189,7 +4184,8 @@ static struct cfg80211_ops ATWILC_WFI_cfg80211_ops = {
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(3,5,0)
 	.set_wakeup = ATWILC_WFI_wake_up,
 #endif
-	
+	.set_tx_power = WILC_WFI_set_tx_power,
+	.get_tx_power = WILC_WFI_get_tx_power,
 };
 
 
