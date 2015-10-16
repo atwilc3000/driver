@@ -1,248 +1,184 @@
+/*
+ * Atmel WILC3000 802.11 b/g/n and Bluetooth Combo driver
+ *
+ * Copyright (c) 2015 Atmel Corportation
+ *
+ * Permission to use, copy, modify, and/or distribute this software for any
+ * purpose with or without fee is hereby granted, provided that the above
+ * copyright notice and this permission notice appear in all copies.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+ * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+ * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+ * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ */
 
-#include "atl_os_wrapper.h"
+#include "atl_error_support.h"
 #include <linux/spinlock.h>
-#ifdef CONFIG_ATL_MSG_QUEUE_FEATURE
+#include <linux/kthread.h>
+#include <linux/semaphore.h>
+#include <linux/module.h>
+#include <linux/slab.h>
+#include <linux/kernel.h>
+#include <linux/delay.h>
+#include <linux/types.h>
+#include <linux/stat.h>
+#include <linux/time.h>
+#include <linux/version.h>
+#include "linux/string.h"
+#include "atl_msg_queue.h"
 
-
-/*!
-*  @author		syounan
-*  @date		1 Sep 2010
-*  @note		copied from FLO glue implementatuion
-*  @version		1.0
-*/
-ATL_ErrNo ATL_MsgQueueCreate(ATL_MsgQueueHandle* pHandle,
-			tstrATL_MsgQueueAttrs* pstrAttrs)
+signed int ATL_MsgQueueCreate(struct MsgQueueHandle *pHandle)
 {
-	tstrATL_SemaphoreAttrs strSemAttrs;
-	ATL_SemaphoreFillDefault(&strSemAttrs);
-	strSemAttrs.u32InitCount = 0;
-
 	spin_lock_init(&pHandle->strCriticalSection);
-	if( (ATL_SemaphoreCreate(&pHandle->hSem, &strSemAttrs) == ATL_SUCCESS))
-	{
-	
-		pHandle->pstrMessageList = NULL;
-		pHandle->u32ReceiversCount = 0;
-		pHandle->bExiting = ATL_FALSE;
+	sema_init(&pHandle->hSem, 0);
 
-		return ATL_SUCCESS;
-	}
-	else
-	{
-		return ATL_FAIL;
-	}
+	pHandle->pstrMessageList = NULL;
+	pHandle->u32ReceiversCount = 0;
+	pHandle->bExiting = false;
+
+	return ATL_SUCCESS;
 }
+EXPORT_SYMBOL(ATL_MsgQueueCreate);
 
-/*!
-*  @author		syounan
-*  @date		1 Sep 2010
-*  @note		copied from FLO glue implementatuion
-*  @version		1.0
-*/
-ATL_ErrNo ATL_MsgQueueDestroy(ATL_MsgQueueHandle* pHandle,
-			tstrATL_MsgQueueAttrs* pstrAttrs)
+signed int ATL_MsgQueueDestroy(struct MsgQueueHandle *pHandle)
 {
+	pHandle->bExiting = true;
 
-	pHandle->bExiting = ATL_TRUE;
-
-	// Release any waiting receiver thread.
-	while(pHandle->u32ReceiversCount > 0)
-	{
-		ATL_SemaphoreRelease(&(pHandle->hSem), ATL_NULL);	
+	/* Release any waiting receiver thread.*/
+	while (pHandle->u32ReceiversCount > 0) {
+		up(&pHandle->hSem);
 		pHandle->u32ReceiversCount--;
 	}
 
-	ATL_SemaphoreDestroy(&pHandle->hSem, ATL_NULL);
-	
-	
-	while(pHandle->pstrMessageList != NULL)
-	{
-		Message * pstrMessge = pHandle->pstrMessageList->pstrNext;
-		ATL_FREE(pHandle->pstrMessageList);
-		pHandle->pstrMessageList = pstrMessge;	
+	while (NULL != pHandle->pstrMessageList) {
+		struct Message *pstrMessge = pHandle->pstrMessageList->pstrNext;
+
+		kfree(pHandle->pstrMessageList);
+		pHandle->pstrMessageList = pstrMessge;
 	}
 
 	return ATL_SUCCESS;
 }
+EXPORT_SYMBOL(ATL_MsgQueueDestroy);
 
-/*!
-*  @author		syounan
-*  @date		1 Sep 2010
-*  @note		copied from FLO glue implementatuion
-*  @version		1.0
-*/
-ATL_ErrNo ATL_MsgQueueSend(ATL_MsgQueueHandle* pHandle,
-			const void * pvSendBuffer, ATL_Uint32 u32SendBufferSize,
-			tstrATL_MsgQueueAttrs* pstrAttrs)
+signed int ATL_MsgQueueSend(struct MsgQueueHandle *pHandle,
+			    const void *pvSendBuffer,
+			    unsigned int u32SendBufferSize)
 {
-	ATL_ErrNo s32RetStatus = ATL_SUCCESS;
+	signed int s32RetStatus = ATL_SUCCESS;
 	unsigned long flags;
-	Message * pstrMessage = NULL;
-	
-	if( (pHandle == NULL) || (u32SendBufferSize == 0) || (pvSendBuffer == NULL) )
-	{
+	struct Message *pstrMessage = NULL;
+
+	if ((NULL == pHandle)
+			|| (u32SendBufferSize == 0)
+			|| (pvSendBuffer == NULL))
 		ATL_ERRORREPORT(s32RetStatus, ATL_INVALID_ARGUMENT);
-	}
 
-	if(pHandle->bExiting == ATL_TRUE)
-	{
+	if (pHandle->bExiting == true)
 		ATL_ERRORREPORT(s32RetStatus, ATL_FAIL);
-	}
 
-	spin_lock_irqsave(&pHandle->strCriticalSection,flags);
-	
-	
+	spin_lock_irqsave(&pHandle->strCriticalSection, flags);
+
 	/* construct a new message */
-	pstrMessage = ATL_NEW(Message, 1);
+	pstrMessage = kmalloc(sizeof(struct Message), GFP_ATOMIC);
 	ATL_NULLCHECK(s32RetStatus, pstrMessage);
 	pstrMessage->u32Length = u32SendBufferSize;
 	pstrMessage->pstrNext = NULL;
-	pstrMessage->pvBuffer = ATL_MALLOC(u32SendBufferSize);
+	pstrMessage->pvBuffer = kmalloc(u32SendBufferSize, GFP_ATOMIC);
 	ATL_NULLCHECK(s32RetStatus, pstrMessage->pvBuffer);
-	ATL_memcpy(pstrMessage->pvBuffer, pvSendBuffer, u32SendBufferSize);
-	
+	memcpy(pstrMessage->pvBuffer, pvSendBuffer, u32SendBufferSize);
+
 
 	/* add it to the message queue */
-	if(pHandle->pstrMessageList == NULL)
-	{
+	if (NULL == pHandle->pstrMessageList) {
 		pHandle->pstrMessageList  = pstrMessage;
-	}
-	else
-	{
-		Message * pstrTailMsg = pHandle->pstrMessageList;
-		while(pstrTailMsg->pstrNext != NULL)
-		{
+	} else {
+		struct Message *pstrTailMsg = pHandle->pstrMessageList;
+
+		while (NULL != pstrTailMsg->pstrNext)
 			pstrTailMsg = pstrTailMsg->pstrNext;
-		}
 		pstrTailMsg->pstrNext = pstrMessage;
-	}	
-	
-	
-	spin_unlock_irqrestore(&pHandle->strCriticalSection,flags);
-	
-	ATL_SemaphoreRelease(&pHandle->hSem, ATL_NULL);
-	
-	ATL_CATCH(s32RetStatus)
-	{
+	}
+
+	spin_unlock_irqrestore(&pHandle->strCriticalSection, flags);
+
+	up(&pHandle->hSem);
+
+	ATL_CATCH(s32RetStatus){
 		/* error occured, free any allocations */
-		if(pstrMessage != NULL)
-		{
-			if(pstrMessage->pvBuffer != NULL)
-			{
-				ATL_FREE(pstrMessage->pvBuffer);
-			}
-			ATL_FREE(pstrMessage);
+		if (NULL != pstrMessage) {
+			kfree(pstrMessage->pvBuffer);
+			kfree(pstrMessage);
 		}
 	}
 
-	return s32RetStatus; 
-}
-
-
-
-/*!
-*  @author		syounan
-*  @date		1 Sep 2010
-*  @note		copied from FLO glue implementatuion
-*  @version		1.0
-*/
-ATL_ErrNo ATL_MsgQueueRecv(ATL_MsgQueueHandle* pHandle, 
-			void * pvRecvBuffer, ATL_Uint32 u32RecvBufferSize, 
-			ATL_Uint32* pu32ReceivedLength,
-			tstrATL_MsgQueueAttrs* pstrAttrs)
-{
-
-	Message * pstrMessage;
-	ATL_ErrNo s32RetStatus = ATL_SUCCESS;
-	tstrATL_SemaphoreAttrs strSemAttrs;
-	unsigned long flags;
-	if( (pHandle == NULL) || (u32RecvBufferSize == 0) 
-		|| (pvRecvBuffer == NULL) || (pu32ReceivedLength == NULL) )
-	{
-		ATL_ERRORREPORT(s32RetStatus, ATL_INVALID_ARGUMENT);
-	}
-
-	if(pHandle->bExiting == ATL_TRUE)
-	{
-		ATL_ERRORREPORT(s32RetStatus, ATL_FAIL);
-	}
-	
-	
-	spin_lock_irqsave(&pHandle->strCriticalSection,flags);
-	pHandle->u32ReceiversCount++;
-	
-	spin_unlock_irqrestore(&pHandle->strCriticalSection,flags);
-	ATL_SemaphoreFillDefault(&strSemAttrs);
-	#ifdef CONFIG_ATL_MSG_QUEUE_TIMEOUT
-	if(pstrAttrs != ATL_NULL)
-	{
-		strSemAttrs.u32TimeOut = pstrAttrs->u32Timeout;
-	}
-	#endif
-	s32RetStatus = ATL_SemaphoreAcquire(&(pHandle->hSem), &strSemAttrs);
-
-	if(s32RetStatus == ATL_TIMEOUT)
-	{
-		// timed out, just exit without consumeing the message 
-		
-		spin_lock_irqsave(&pHandle->strCriticalSection,flags);
-		pHandle->u32ReceiversCount--;
-		spin_unlock_irqrestore(&pHandle->strCriticalSection,flags);
-		
-	}
-	else
-	{
-		/* other non-timeout scenarios */
-		ATL_ERRORCHECK(s32RetStatus);
-
-		if(pHandle->bExiting)
-		{
-			ATL_ERRORREPORT(s32RetStatus, ATL_FAIL);
-		}
-
-	
-		spin_lock_irqsave(&pHandle->strCriticalSection,flags);
-		
-		pstrMessage = pHandle->pstrMessageList;
-		if(pstrMessage == NULL)
-		{
-
-
-		spin_unlock_irqrestore(&pHandle->strCriticalSection,flags);
-
-			ATL_ERRORREPORT(s32RetStatus, ATL_FAIL);
-		}
-
-		/* check buffer size */
-		if(u32RecvBufferSize < pstrMessage->u32Length)
-		{	
-			spin_unlock_irqrestore(&pHandle->strCriticalSection,flags);
-			
-		ATL_SemaphoreRelease(&pHandle->hSem, ATL_NULL);
-			
-			ATL_ERRORREPORT(s32RetStatus, ATL_BUFFER_OVERFLOW);
-		}
-
-		/* consume the message */
-	
-		pHandle->u32ReceiversCount--;
-		ATL_memcpy(pvRecvBuffer, pstrMessage->pvBuffer, pstrMessage->u32Length);
-		*pu32ReceivedLength = pstrMessage->u32Length;
-
-		pHandle->pstrMessageList = pstrMessage->pstrNext;
-		
-		ATL_FREE(pstrMessage->pvBuffer);
-		ATL_FREE(pstrMessage);	
-		
-		
-		spin_unlock_irqrestore(&pHandle->strCriticalSection,flags);
-	}
-
-	ATL_CATCH(s32RetStatus)
-	{
-	}
-	
 	return s32RetStatus;
 }
+EXPORT_SYMBOL(ATL_MsgQueueSend);
+	
+signed int ATL_MsgQueueRecv(struct MsgQueueHandle *pHandle,
+			   void *pvRecvBuffer, unsigned int u32RecvBufferSize,
+			   unsigned int *pu32ReceivedLength)
+{
 
-#endif
+	struct Message *pstrMessage;
+	signed int s32RetStatus = ATL_SUCCESS;
+	unsigned long flags;
+
+	if ((NULL == pHandle) || (u32RecvBufferSize == 0)
+	    || (NULL == pvRecvBuffer) || (NULL == pu32ReceivedLength))
+		ATL_ERRORREPORT(s32RetStatus, ATL_INVALID_ARGUMENT);
+
+	if (pHandle->bExiting == true)
+		ATL_ERRORREPORT(s32RetStatus, ATL_FAIL);
+
+	spin_lock_irqsave(&pHandle->strCriticalSection, flags);
+	pHandle->u32ReceiversCount++;
+
+		/* timed out, just exit without consumeing the message */
+	spin_unlock_irqrestore(&pHandle->strCriticalSection, flags);
+	down(&(pHandle->hSem));
+
+	ATL_ERRORCHECK(s32RetStatus);
+
+	if (pHandle->bExiting)
+		ATL_ERRORREPORT(s32RetStatus, ATL_FAIL);
+
+	spin_lock_irqsave(&pHandle->strCriticalSection, flags);
+
+	pstrMessage = pHandle->pstrMessageList;
+	if (NULL == pstrMessage) {
+		spin_unlock_irqrestore(&pHandle->strCriticalSection, flags);
+		ATL_ERRORREPORT(s32RetStatus, ATL_FAIL);
+	}
+
+	/* check buffer size */
+	if (u32RecvBufferSize < pstrMessage->u32Length) {
+		spin_unlock_irqrestore(&pHandle->strCriticalSection, flags);
+		up(&pHandle->hSem);
+		ATL_ERRORREPORT(s32RetStatus, ATL_BUFFER_OVERFLOW);
+	}
+
+	/* consume the message */
+	pHandle->u32ReceiversCount--;
+	memcpy(pvRecvBuffer, pstrMessage->pvBuffer, pstrMessage->u32Length);
+	*pu32ReceivedLength = pstrMessage->u32Length;
+
+	pHandle->pstrMessageList = pstrMessage->pstrNext;
+
+	kfree(pstrMessage->pvBuffer);
+	kfree(pstrMessage);
+
+
+	spin_unlock_irqrestore(&pHandle->strCriticalSection, flags);
+
+	ATL_CATCH(s32RetStatus)
+	{
+	}
+	return s32RetStatus;
+}
+EXPORT_SYMBOL(ATL_MsgQueueRecv);

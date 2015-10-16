@@ -1,5 +1,27 @@
+/*
+ * Atmel WILC3000 802.11 b/g/n and Bluetooth Combo driver
+ *
+ * Copyright (c) 2015 Atmel Corportation
+ *
+ * Permission to use, copy, modify, and/or distribute this software for any
+ * purpose with or without fee is hereby granted, provided that the above
+ * copyright notice and this permission notice appear in all copies.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+ * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+ * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+ * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ */
+
 #ifndef LINUX_WLAN_COMMON_H
 #define LINUX_WLAN_COMMON_H
+
+
+#define WIFI_FIRMWARE	"wifi_firmware.bin"
+#define BT_FIRMWARE				"bt_firmware.bin"
 
 enum debug_region{
 	Generic_debug = 0,
@@ -12,7 +34,6 @@ enum debug_region{
 	RX_debug,
 	Lock_debug,
 	Tcp_enhance,
-	/*Added by amr - BugID_4720*/
 	Spin_debug,
 	
 	Init_debug,
@@ -34,8 +55,6 @@ enum debug_region{
 #define LOCK_DBG	  		(1<<Lock_debug)
 #define TCP_ENH	  			(1<<Tcp_enhance)
 
-
-/*Added by Amr - BugID_4720*/
 #define SPIN_DEBUG 			(1<<Spin_debug)
 
 #define INIT_DBG	  	  		(1<<Init_debug)
@@ -43,42 +62,6 @@ enum debug_region{
 #define MEM_DBG		  		(1<<Mem_debug)
 #define FIRM_DBG	  		(1<<Firmware_debug)
 #define PWRDEV_DBG	  		(1<<PwrDev_debug)
-
-#if defined (ATWILC_DEBUGFS)
-extern void kmsgdump_write(char *fmt, ...);
-extern int atwilc_debugfs_init(void);
-extern void atwilc_debugfs_remove(void);
-
-extern atomic_t REGION;
-extern atomic_t DEBUG_LEVEL;
-
-#define DEBUG		(1 << 0)
-#define INFO		(1 << 1)
-#define WRN			(1 << 2)
-#define ERR			(1 << 3)
-
-#define PRINT_D(region,...)	do{ if((atomic_read(&DEBUG_LEVEL) & DEBUG) && ((atomic_read(&REGION))&(region))){printk("DBG [%s: %d]",__FUNCTION__,__LINE__);\
-							kmsgdump_write("DBG [%s: %d]",__FUNCTION__,__LINE__);\
-							kmsgdump_write(__VA_ARGS__);\
-							printk(__VA_ARGS__);}}while(0)
-							
-#define PRINT_INFO(region,...) do{ if((atomic_read(&DEBUG_LEVEL) & INFO) && ((atomic_read(&REGION))&(region))){printk("INFO [%s]",__FUNCTION__);\
-							kmsgdump_write("INFO [%s]",__FUNCTION__);\
-							kmsgdump_write(__VA_ARGS__);\
-							printk(__VA_ARGS__);}}while(0)
-
-#define PRINT_WRN(region,...) do{ if((atomic_read(&DEBUG_LEVEL) & WRN) && ((atomic_read(&REGION))&(region))){printk("WRN [%s: %d]",__FUNCTION__,__LINE__);\
-							kmsgdump_write("WRN [%s: %d]",__FUNCTION__,__LINE__);\
-							kmsgdump_write(__VA_ARGS__);\
-							printk(__VA_ARGS__);}}while(0)
-
-#define PRINT_ER(...)	do{ if((atomic_read(&DEBUG_LEVEL) & ERR)) {	\
-							printk("ERR [%s: %d]",__FUNCTION__,__LINE__);\
-							kmsgdump_write("ERR [%s: %d]",__FUNCTION__,__LINE__);\
-							kmsgdump_write(__VA_ARGS__);\
-							printk(__VA_ARGS__);}}while(0)
-
-#else
 
 #define REGION	 INIT_DBG|GENERIC_DBG|CFG80211_DBG | FIRM_DBG | HOSTAPD_DBG | PWRDEV_DBG
 
@@ -96,45 +79,15 @@ extern atomic_t DEBUG_LEVEL;
 
 #define PRINT_ER(...)	do{ printk("ERR [%s: %d]",__FUNCTION__,__LINE__);\
 							printk(__VA_ARGS__);}while(0)
-#endif
-
-#define FN_IN	//PRINT_D(">>> \n")
-#define FN_OUT	//PRINT_D("<<<\n")
-
 #ifdef MEMORY_STATIC
-#define LINUX_RX_SIZE	(96*1024)
+#define LINUX_RX_SIZE	(96 * 1024)
 #endif
-#define LINUX_TX_SIZE	(64*1024)
+#define LINUX_TX_SIZE	(64 * 1024)
 
+#if defined(PANDA_BOARD)
+#define MODALIAS	"WILC_SPI"
+#define GPIO_NUM	139
+#endif /* PANDA_BOARD */
 
-#define ATWILC_MULTICAST_TABLE_SIZE	8
-
-#if defined (NM73131_0_BOARD)
-
-#define MODALIAS "atwilc_spi"
-#define GPIO_NUM	IRQ_ATWILC_GPIO
-
-#elif defined (BEAGLE_BOARD)
-	#define SPI_CHANNEL	4
-	
-	#if SPI_CHANNEL == 4
-		#define MODALIAS 	"atwilc_spi4"
-		#define GPIO_NUM	162
-	#else
-		#define MODALIAS 	"atwilc_spi3"
-		#define GPIO_NUM	133
-	#endif
-#elif defined(PANDA_BOARD)
-	#define MODALIAS 	"ATWILC_SPI"
-	#define GPIO_NUM	139
-#else
-	#define MODALIAS 	"ATWILC_SPI"
-	#define GPIO_NUM	139
-
-#endif
-	
-
-void linux_wlan_enable_irq(void);
 int linux_wlan_get_num_conn_ifcs(void);
-
-#endif
+#endif /* LINUX_WLAN_COMMON_H */
