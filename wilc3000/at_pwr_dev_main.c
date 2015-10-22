@@ -878,7 +878,7 @@ int at_pwr_power_up(int source)
 	mutex_unlock(&pwr_dev.cs);
 
 	return 0;
-}
+}
 EXPORT_SYMBOL(at_pwr_power_up);
 
 static int wilc_bt_firmware_download(void)
