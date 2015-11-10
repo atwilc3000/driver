@@ -4361,7 +4361,11 @@ static int hostIFthread(void *pvArg)
 			PRINT_D(HOSTINF_DBG, "Requeue connect request till scan done received\n");
 			ATL_MsgQueueSend(&gMsgQHostIF, &strHostIFmsg,
 					 sizeof(struct tstrHostIFmsg));
+#if LINUX_VERSION_CODE > KERNEL_VERSION(2,6,35)
 			usleep_range(2000, 2100);
+#else
+			udelay(2000);
+#endif
 			continue;
 		}
 

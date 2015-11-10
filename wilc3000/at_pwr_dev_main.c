@@ -749,7 +749,11 @@ void chip_wakeup(int source)
 		while (((clk_status_reg_val & u32ClkStsBit) == 0) &&
 		       (((++trials) % 3) == 0)) {
 			/* Wait for the chip to stabilize*/
+#if LINUX_VERSION_CODE > KERNEL_VERSION(2,6,35)
 			usleep_range(1000, 1000);
+#else
+			udelay(1000);
+#endif
 
 			/*
 			 * Make sure chip is awake. This is an extra step that can be removed

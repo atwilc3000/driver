@@ -581,7 +581,7 @@ static int sdio_sync(void)
 }
 #endif
 
-int sdio_init(struct wilc_wlan_inp *inp, wilc_debug_func func)
+int sdio_init(struct wilc_wlan_inp *inp)
 {
 	struct sdio_cmd52_t cmd;
 	int loop;

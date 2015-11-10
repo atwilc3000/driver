@@ -1811,7 +1811,7 @@ int mac_open(struct net_device *ndev)
 		ret = -EINVAL;
 		goto _err_;
 	}
-
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 37))
 	WILC_WFI_frame_register(nic->wilc_netdev->ieee80211_ptr->wiphy,
 				nic->wilc_netdev,
 				nic->g_struct_frame_reg[0].frame_type,
@@ -1820,6 +1820,7 @@ int mac_open(struct net_device *ndev)
 				nic->wilc_netdev,
 				nic->g_struct_frame_reg[1].frame_type,
 				nic->g_struct_frame_reg[1].reg);
+#endif
 	netif_wake_queue(ndev);
 	g_linux_wlan->open_ifcs++;
 	nic->mac_opened = 1;
@@ -2132,7 +2133,7 @@ int mac_ioctl(struct net_device *ndev, struct ifreq *req, int cmd)
 			goto done;
 		}
 
-		if (strnicmp(buff, "BTCOEXMODE", strlen("BTCOEXMODE")) == 0) {
+		if (strncasecmp(buff, "BTCOEXMODE", strlen("BTCOEXMODE")) == 0) {
 			uint32_t mode = *(buff + strlen("BTCOEXMODE") + 1) - '0';
 #ifdef WILC_BT_COEXISTENCE
 			PRINT_D(GENERIC_DBG, "[COEX] [DRV] rcvd IO ctrl << BT-MODE: %d >>\n", mode);
@@ -2158,7 +2159,7 @@ int mac_ioctl(struct net_device *ndev, struct ifreq *req, int cmd)
 
 			PRINT_D(GENERIC_DBG, "IOCTRL priv: %s", buff);
 
-			if (strnicmp(buff, "RSSI", size) == 0) {
+			if (strncasecmp(buff, "RSSI", size) == 0) {
 				s32Error = host_int_get_rssi(priv->hWILCWFIDrv, &(rssi));
 				if (s32Error)
 					PRINT_ER("Failed to send get rssi param's message queue ");
@@ -2173,7 +2174,7 @@ int mac_ioctl(struct net_device *ndev, struct ifreq *req, int cmd)
 					s32Error = -EFAULT;
 					goto done;
 				}
-			} else if (strnicmp(buff, "BTCOEXMODE", strlen("BTCOEXMODE")) == 0) {
+			} else if (strncasecmp(buff, "BTCOEXMODE", strlen("BTCOEXMODE")) == 0) {
 				uint32_t mode = *(buff + strlen("BTCOEXMODE") + 1) - '0';
 #ifdef WILC_BT_COEXISTENCE
 				PRINT_D(GENERIC_DBG, "[COEX] [DRV] rcvd IO ctrl << BT-MODE: %d >>\n", mode);
@@ -2182,11 +2183,11 @@ int mac_ioctl(struct net_device *ndev, struct ifreq *req, int cmd)
 				*/
 
 #endif
-			} else if (strnicmp(buff, "BTCOEXSCAN-START", strlen("BTCOEXSCAN-START")) == 0) {
+			} else if (strncasecmp(buff, "BTCOEXSCAN-START", strlen("BTCOEXSCAN-START")) == 0) {
 #ifdef WILC_BT_COEXISTENCE
 				PRINT_D(GENERIC_DBG, "[COEX] [DRV] rcvd IO ctrl << BTCOEXSCAN-START >>\n");
 #endif
-			} else if (strnicmp(buff, "BTCOEXSCAN-STOP", strlen("BTCOEXSCAN-STOP")) == 0) {
+			} else if (strncasecmp(buff, "BTCOEXSCAN-STOP", strlen("BTCOEXSCAN-STOP")) == 0) {
 #ifdef WILC_BT_COEXISTENCE
 				PRINT_D(GENERIC_DBG, "[COEX] [DRV] rcvd IO ctrl << BTCOEXSCAN-STOP >>\n");
 #endif
@@ -2320,7 +2321,7 @@ void WILC_WFI_mgmt_rx(uint8_t *buff, uint32_t size)
 			return;
 		}
 	}
-
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,37)
 #ifdef WILC_P2P
 	nic = netdev_priv(g_linux_wlan->strInterfaceInfo[1].wilc_netdev);
 	if ((buff[0] == nic->g_struct_frame_reg[0].frame_type &&
@@ -2328,6 +2329,7 @@ void WILC_WFI_mgmt_rx(uint8_t *buff, uint32_t size)
 	    (buff[0] == nic->g_struct_frame_reg[1].frame_type &&
 	     nic->g_struct_frame_reg[1].reg))
 		WILC_WFI_p2p_rx(g_linux_wlan->strInterfaceInfo[1].wilc_netdev, buff, size);
+#endif
 #endif
 }
 

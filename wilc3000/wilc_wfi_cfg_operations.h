@@ -92,8 +92,9 @@ static const u32 cipher_suites[] = {
 	WLAN_CIPHER_SUITE_AES_CMAC,
 };
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,37)
 static const struct ieee80211_txrx_stypes
-	wilc_wfi_cfg80211_mgmt_types[NUM_NL80211_IFTYPES] = {
+	wilc_wfi_cfg80211_mgmt_types[NL80211_IFTYPE_MAX] = {
 	[NL80211_IFTYPE_STATION] = {
 		.tx = 0xffff,
 		.rx = BIT(IEEE80211_STYPE_ACTION >> 4) |
@@ -121,6 +122,7 @@ static const struct ieee80211_txrx_stypes
 			BIT(IEEE80211_STYPE_DEAUTH >> 4)
 	}
 };
+#endif
 
 /* Time to stay on the channel */
 #define WILC_WFI_DWELL_PASSIVE	100
@@ -135,7 +137,9 @@ int WILC_WFI_InitHostInt(struct net_device *net);
 int WILC_WFI_deinit_mon_interface(void);
 struct net_device *WILC_WFI_init_mon_interface(const char *name,
 					       struct net_device *real_dev);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,37)
 void WILC_WFI_p2p_rx(struct net_device *dev, uint8_t *buff, uint32_t size);
+#endif
 
 #ifdef TCP_ENHANCEMENTS
 #define TCP_ACK_FILTER_LINK_SPEED_THRESH	54

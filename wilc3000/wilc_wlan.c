@@ -1064,11 +1064,19 @@ static void wilc_pllupdate_isr_ext(uint32_t int_stats)
 	g_wlan.hif_func.hif_clear_int_ext(PLL_INT_CLR);
 
 	/* Waiting for PLL */
+	#if LINUX_VERSION_CODE > KERNEL_VERSION(2,6,35)
 	usleep_range(WILC_PLL_TO * 1000, (WILC_PLL_TO * 1000) + 100);
+	#else
+	mdelay(WILC_PLL_TO);
+	#endif
 	/* poll till read a valid data */
 	while (!(ISWILC3000(wilc_get_chipid(true)) && --trials)) {
 		PRINT_D(TX_DBG, "PLL update retrying\n");
+		#if LINUX_VERSION_CODE > KERNEL_VERSION(2,6,35)
 		usleep_range(1000, 1100);
+		#else
+		udelay(1000);
+		#endif
 	}
 }
 
