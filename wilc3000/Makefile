@@ -9,7 +9,6 @@ ccflags-y += -DCONNECT_DIRECT -DWILC_PARSE_SCAN_IN_HOST
 ccflags-y += -DAGING_ALG -DDISABLE_PWRSAVE_AND_SCAN_DURING_IP
 ccflags-y += -Wno-unused-function
 ccflags-y += -DWILC_BT_COEXISTENCE -DDOWNLOAD_BT_FW
-ccflags-y += -DPLAT_SAMA5D4
 
 wilc3000-y += atl_msg_queue.o
 wilc3000-y += wilc_host_ap.o
