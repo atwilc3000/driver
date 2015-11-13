@@ -28,12 +28,6 @@
 
 #define SDIO_MODALIAS "wilc_sdio"
 
-#if defined (PLAT_SAMA5D4)
-#define MAX_SPEED 40000000 // 6000000
-#else
-#define MAX_SPEED 50000000
-#endif
-
 struct sdio_func *local_sdio_func = NULL;
 EXPORT_SYMBOL(local_sdio_func);
 
@@ -284,22 +278,6 @@ void disable_sdio_interrupt(void)
 }
 EXPORT_SYMBOL(disable_sdio_interrupt);
 
-static int linux_sdio_set_speed(int speed)
-{
-#if 0
-	struct mmc_ios ios;
-	sdio_claim_host(local_sdio_func);
-	
-	memcpy((void *)&ios,(void *)&local_sdio_func->card->host->ios,sizeof(struct mmc_ios));
-	local_sdio_func->card->host->ios.clock = speed;
-	ios.clock = speed;
-	local_sdio_func->card->host->ops->set_ios(local_sdio_func->card->host,&ios);
-	sdio_release_host(local_sdio_func);
-	PRINT_D(INIT_DBG,"@@@@@@@@@@@@ change SDIO speed to %d @@@@@@@@@\n", speed);
-#endif
-	return 1;
-}
-
 int linux_sdio_init(void *pv)
 {
 #ifndef WILC_SDIO_IRQ_GPIO
@@ -312,9 +290,3 @@ void linux_sdio_deinit(void *pv)
 {
 	sdio_unregister_driver(&wilc_bus);
 }
-
-int linux_sdio_set_max_speed(void)
-{
-	return linux_sdio_set_speed(MAX_SPEED);
-}
-

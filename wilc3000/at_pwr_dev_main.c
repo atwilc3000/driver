@@ -680,7 +680,6 @@ void prepare_inp(struct wilc_wlan_inp *nwi)
 	nwi->io_func.io_deinit = linux_sdio_deinit;
 	nwi->io_func.u.sdio.sdio_cmd52 = linux_sdio_cmd52;
 	nwi->io_func.u.sdio.sdio_cmd53 = linux_sdio_cmd53;
-	nwi->io_func.u.sdio.sdio_set_max_speed = linux_sdio_set_max_speed;
 #else
 	nwi->io_func.io_type = HIF_SPI;
 	nwi->io_func.io_init = linux_spi_init;

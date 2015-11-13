@@ -89,7 +89,6 @@ struct wilc_wlan_io_func {
 		struct {
 			int (*sdio_cmd52)(struct sdio_cmd52_t *);
 			int (*sdio_cmd53)(struct sdio_cmd53_t *);
-			int (*sdio_set_max_speed)(void);
 		} sdio;
 		struct {
 			int (*spi_tx)(uint8_t *, uint32_t);
