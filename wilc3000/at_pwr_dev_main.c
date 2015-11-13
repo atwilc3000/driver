@@ -798,27 +798,10 @@ void release_bus(enum BUS_RELEASE release, int source)
 }
 EXPORT_SYMBOL(release_bus);
 
- #if defined(PLAT_SAMA5D4)
- extern void atmci_rescan_card(unsigned id,unsigned insert);
- #define WILC_SDIO_CARD_ID	0
  #define _linux_wlan_device_detection()		{}
  #define _linux_wlan_device_removal()		{}
  #define _linux_wlan_device_power_on()		{}
  #define _linux_wlan_device_power_off()		{} 
- #elif defined(PANDA_BOARD)
- #define _linux_wlan_device_detection()		mmc_start_host(mmc_host_backup[2])
- #define _linux_wlan_device_removal()		mmc_stop_host(mmc_host_backup[2])
- #define _linux_wlan_device_power_on()		{}
- #define _linux_wlan_device_power_off()		{} 
- #elif defined(PLAT_ALLWINNER_A31)
- extern void sw_mci_rescan_card(unsigned id, unsigned insert);
- extern void wifi_pm_power(int on);
- #define ATWILC_SDIO_CARD_ID	1
- #define _linux_wlan_device_power_on()          wifi_pm_power(1)
- #define _linux_wlan_device_power_off()         wifi_pm_power(0)
- #define _linux_wlan_device_detection()         sw_mci_rescan_card(ATWILC_SDIO_CARD_ID,1)
- #define _linux_wlan_device_removal()           sw_mci_rescan_card(ATWILC_SDIO_CARD_ID,0)
-#endif
 
 static int linux_wlan_device_power(int on_off)
 {
@@ -871,7 +854,7 @@ int at_pwr_power_up(int source)
 		PRINT_WRN(PWRDEV_DBG, "Device already up. request source is %s\n",
 			 (source == PWR_DEV_SRC_WIFI ? "Wifi" : "BT"));
 	} else {
-		printk("PLAT_ALLWINNER_A31 POWER UP\n");
+		printk("POWER UP\n");
 		linux_wlan_device_power(0);
 		linux_wlan_device_power(1);
 		msleep(100);

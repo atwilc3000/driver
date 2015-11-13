@@ -84,11 +84,6 @@ enum debug_region{
 #endif
 #define LINUX_TX_SIZE	(64 * 1024)
 
-#if defined(PANDA_BOARD)
-#define MODALIAS	"WILC_SPI"
-#define GPIO_NUM	139
-#endif /* PANDA_BOARD */
-
 #if defined(PLAT_SAMA5D4)
 #define MODALIAS	"wilc_spi"
 #define GPIO_NUM	46
