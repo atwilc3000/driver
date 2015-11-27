@@ -553,7 +553,7 @@ static signed int Handle_SendBufferedEAP(void *drvHandler,
 		pstrHostIFSendBufferedEAP->pfFreeEAPBuffParams(pstrHostIFSendBufferedEAP->pvUserArg);
 
 	/*Free allocated buffer*/
-	if (pstrHostIFSendBufferedEAP->pu8Buff == NULL)	{
+	if (pstrHostIFSendBufferedEAP->pu8Buff != NULL)	{
 		kfree(pstrHostIFSendBufferedEAP->pu8Buff);
 		pstrHostIFSendBufferedEAP->pu8Buff = NULL;
 	}
@@ -4690,6 +4690,8 @@ static int hostIFthread(void *pvArg)
 	PRINT_D(HOSTINF_DBG, "Releasing thread exit semaphore\n");
 	up(&hSemHostIFthrdEnd);
 
+	while (!kthread_should_stop())
+				schedule();
 	return 0;
 }
 
@@ -4748,7 +4750,15 @@ signed int host_int_send_buffered_eap(struct WFIDrvHandle *hWFIDrv,
 	strHostIFmsg.uniHostIFmsgBody.strHostIFSendBufferedEAP.u32Size = u32Size;
 	strHostIFmsg.uniHostIFmsgBody.strHostIFSendBufferedEAP.u32PktOffset = u32PktOffset;
 	strHostIFmsg.uniHostIFmsgBody.strHostIFSendBufferedEAP.pu8Buff = kmalloc(u32Size + u32PktOffset, GFP_ATOMIC);
-	memcpy(strHostIFmsg.uniHostIFmsgBody.strHostIFSendBufferedEAP.pu8Buff, pu8Buff, u32Size + u32PktOffset);
+	if(strHostIFmsg.uniHostIFmsgBody.strHostIFSendBufferedEAP.pu8Buff != NULL)
+	{
+		memcpy(strHostIFmsg.uniHostIFmsgBody.strHostIFSendBufferedEAP.pu8Buff, pu8Buff, u32Size + u32PktOffset);
+	}
+	else
+	{
+		ATL_ERRORREPORT(s32Error, ATL_NO_MEM);
+	}
+	
 	strHostIFmsg.uniHostIFmsgBody.strHostIFSendBufferedEAP.pvUserArg = pvUserArg;
 
 	/* send the message */
@@ -6562,6 +6572,9 @@ signed int host_int_deinit(struct WFIDrvHandle *hWFIDrv, char* pcIfName, u8 u8If
 
 		down(&hSemHostIFthrdEnd);
 
+		kthread_stop(HostIFthreadHandler);
+		HostIFthreadHandler = NULL;
+		
 		ATL_MsgQueueDestroy(&gMsgQHostIF);
 		msgQ_created = 0;
 	}

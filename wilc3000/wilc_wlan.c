@@ -424,8 +424,11 @@ static int wilc_wlan_txq_add_cfg_pkt(uint8_t *buffer, uint32_t buffer_size)
 
 	tqe = kmalloc(sizeof(*tqe), GFP_KERNEL);
 	if (NULL == tqe)
+	{
+		up(p->cfg_wait);
 		return 0;
-
+	}
+	
 	tqe->type = WILC_CFG_PKT;
 	tqe->buffer = buffer;
 	tqe->buffer_size = buffer_size;
@@ -440,8 +443,10 @@ static int wilc_wlan_txq_add_cfg_pkt(uint8_t *buffer, uint32_t buffer_size)
 	PRINT_D(TX_DBG, "Adding the config packet at the Queue tail\n");
 
 	if (wilc_wlan_txq_add_to_head(tqe))
+	{
+		up(p->cfg_wait);
 		return 0;
-
+	}
 	return 1;
 }
 
@@ -453,8 +458,11 @@ static int wilc_wlan_txq_add_net_pkt(void *priv, uint8_t *buffer,
 	struct txq_entry_t *tqe;
 
 	if (p->quit)
+	{
+		PRINT_D(TX_DBG, "drv is quitting, return from net_pkt\n");
+		func(priv, 0);
 		return 0;
-
+	}
 	if (!(g_wlan.initialized)) {
 		PRINT_D(TX_DBG, "not_init, return from net_pkt\n");
 		func(priv, 0);
@@ -463,7 +471,11 @@ static int wilc_wlan_txq_add_net_pkt(void *priv, uint8_t *buffer,
 
 	tqe = kmalloc(sizeof(*tqe), GFP_KERNEL);
 	if (tqe == NULL)
+	{
+		PRINT_D(TX_DBG, "malloc failed, return from net_pkt\n");
+		func(priv, 0);
 		return 0;
+	}
 	tqe->type = WILC_NET_PKT;
 	tqe->buffer = buffer;
 	tqe->buffer_size = buffer_size;
@@ -492,7 +504,11 @@ int wilc_wlan_txq_add_mgmt_pkt(void *priv, uint8_t *buffer,
 	struct txq_entry_t *tqe;
 
 	if (p->quit)
+	{
+		PRINT_D(TX_DBG, "drv is quitting, return from mgmt_pkt\n");
+		func(priv, 0);
 		return 0;
+	}
 
 	if (!(g_wlan.initialized)) {
 		PRINT_D(TX_DBG, "not_init, return from mgmt_pkt\n");
@@ -502,7 +518,11 @@ int wilc_wlan_txq_add_mgmt_pkt(void *priv, uint8_t *buffer,
 
 	tqe = kmalloc(sizeof(*tqe), GFP_KERNEL);
 	if (NULL == tqe)
-		return 0;
+	{
+		PRINT_D(TX_DBG, "malloc failed, return from mgmt_pkt\n");
+		func(priv, 0);
+		return 0;		
+	}
 	tqe->type = WILC_MGMT_PKT;
 	tqe->buffer = buffer;
 	tqe->buffer_size = buffer_size;
@@ -511,37 +531,12 @@ int wilc_wlan_txq_add_mgmt_pkt(void *priv, uint8_t *buffer,
 #ifdef TCP_ACK_FILTER
 	tqe->tcp_PendingAck_index = NOT_TCP_ACK;
 #endif
-	PRINT_D(TX_DBG, "Adding Network packet at the Queue tail\n");
+	PRINT_D(TX_DBG, "Adding Mgmt packet at the Queue tail\n");
 	wilc_wlan_txq_add_to_tail(tqe);
 
 	return 1;
 }
 
-#ifdef WILC_FULLY_HOSTING_AP
-int wilc_FH_wlan_txq_add_net_pkt(void *priv, uint8_t *buffer,
-				 uint32_t buffer_size,
-				 wilc_tx_complete_func_t func)
-{
-	struct wilc_wlan_dev *p = (struct wilc_wlan_dev *)&g_wlan;
-	struct txq_entry_t *tqe;
-
-	if (p->quit)
-		return 0;
-
-	tqe = kmalloc(sizeof(*tqe), GFP_KERNEL);
-	if (NULL == tqe)
-		return 0;
-	tqe->type = WILC_FH_DATA_PKT;
-	tqe->buffer = buffer;
-	tqe->buffer_size = buffer_size;
-	tqe->tx_complete_func = func;
-	tqe->priv = priv;
-	PRINT_D(TX_DBG, "Adding mgmt packet at the Queue tail\n");
-	wilc_wlan_txq_add_to_tail(tqe);
-	/* return number of itemes in the queue */
-	return p->txq_entries;
-}
-#endif  /* WILC_FULLY_HOSTING_AP*/
 #endif /* WILC_AP_EXTERNAL_MLME */
 static struct txq_entry_t *wilc_wlan_txq_get_first(void)
 {
@@ -625,8 +620,7 @@ void chip_sleep_manually(unsigned int u32SleepTime, int source)
 	/* Trigger the manual sleep interrupt host_interrupt_4 */
 	g_wlan.hif_func.hif_write_reg(0x10B8, 1);
 
-	genuChipPSstate = CHIP_SLEEPING_MANUAL;
-	release_bus(RELEASE_ONLY, PWR_DEV_SRC_WIFI);
+	release_bus(RELEASE_ONLY, source);
 }
 
 void wilc_host_sleep_notify( int source)
@@ -684,10 +678,6 @@ static int wilc_wlan_handle_txq(uint32_t *pu32TxqCount)
 				 */
 				else if (tqe->type == WILC_NET_PKT)
 					vmm_sz = ETH_ETHERNET_HDR_OFFSET;
-			#ifdef WILC_FULLY_HOSTING_AP
-				else if (tqe->type == WILC_FH_DATA_PKT)
-					vmm_sz = FH_TX_HOST_HDR_OFFSET;
-			#endif
 			#ifdef WILC_AP_EXTERNAL_MLME
 				else
 					vmm_sz = HOST_HDR_OFFSET;
@@ -884,11 +874,6 @@ static int wilc_wlan_handle_txq(uint32_t *pu32TxqCount)
 					/*copy the bssid at the sart of the buffer*/
 					memcpy(&txb[offset + 4], pBSSID, 6);
 				}
-			#ifdef WILC_FULLY_HOSTING_AP
-				else if (tqe->type == WILC_FH_DATA_PKT) {
-					buffer_offset = FH_TX_HOST_HDR_OFFSET;
-				}
-			#endif
 				else {
 					buffer_offset = HOST_HDR_OFFSET;
 				}
@@ -1331,6 +1316,11 @@ static int wilc_bt_firmware_download(const uint8_t *buffer, uint32_t buffer_size
 		ret = p->hif_func.hif_block_tx(addr, dma_buffer, size2);
 		if (!ret)
 			break;
+		/*
+		 * Ticket #878: delay after the block tx, or else the FW will be downloaded 
+		 * corrupted in the IRAM for an unknown reason
+		 */
+		mdelay(1);
 		
 		addr += size2;
 		offset += size2;
@@ -1505,6 +1495,22 @@ static int wilc_wlan_stop(void)
 		return ret;
 	}
 
+	/* Inform the power sequencer to ignore WIFI sleep signal on making chip sleep decision */
+	ret = p->hif_func.hif_read_reg(rPWR_SEQ_MISC_CTRL, &reg);
+	if (!ret) {
+		PRINT_ER("Error while reading reg\n");
+		release_bus(RELEASE_ALLOW_SLEEP, PWR_DEV_SRC_WIFI);
+		return ret;
+	}
+	
+	reg &= ~BIT28;
+	ret = p->hif_func.hif_write_reg(rPWR_SEQ_MISC_CTRL, reg);
+	if (!ret) {
+		PRINT_ER("Error while writing reg\n");
+		release_bus(RELEASE_ALLOW_SLEEP, PWR_DEV_SRC_WIFI);
+		return ret;
+	}
+
 	ret = p->hif_func.hif_read_reg(WILC_GLB_RESET_0, &reg);
 	if (!ret) {
 		PRINT_ER("Error while reading reg\n");
@@ -1620,8 +1626,8 @@ static void wilc_wlan_cleanup(void)
 		rqe = wilc_wlan_rxq_remove();
 		if (NULL == rqe)
 			break;
-	#ifdef MEMORY_DYNAMIC
-		kfree(tqe->buffer);
+	#ifndef MEMORY_STATIC
+		kfree(rqe->buffer);
 	#endif
 		kfree(rqe);
 	} while (1);
@@ -1966,9 +1972,6 @@ int at_wlan_init(struct wilc_wlan_inp *inp, struct wilc_wlan_oup *oup)
 
 #if defined(WILC_AP_EXTERNAL_MLME) || defined(WILC_P2P)
 	oup->wlan_add_mgmt_to_tx_que = wilc_wlan_txq_add_mgmt_pkt;
-#ifdef WILC_FULLY_HOSTING_AP
-	oup->wlan_add_data_to_tx_que = wilc_FH_wlan_txq_add_net_pkt;
-#endif
 #endif
 
 	if (!init_chip()) {
@@ -1992,11 +1995,3 @@ _fail_:
 }
 
 
-
-#ifdef WILC_FULLY_HOSTING_AP
-struct wilc_wlan_dev *Get_wlan_context(u16 *pu16size)
-{
-	*pu16size = sizeof(struct wilc_wlan_dev);
-	return &g_wlan;
-}
-#endif

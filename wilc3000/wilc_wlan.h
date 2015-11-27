@@ -58,9 +58,6 @@ uint32_t wilc_get_chipid(uint8_t update);
 #define ETH_CONFIG_PKT_HDR_LEN		UDP_DATA_OFFSET
 #define ETH_CONFIG_PKT_HDR_OFFSET	(ETH_ETHERNET_HDR_OFFSET \
 					+ ETH_CONFIG_PKT_HDR_LEN)
-#ifdef WILC_FULLY_HOSTING_AP
-#define	FH_TX_HOST_HDR_OFFSET		24
-#endif
 
 /*
  * Endian Conversion
@@ -154,9 +151,6 @@ uint32_t wilc_get_chipid(uint8_t update);
  */
 #ifdef WILC_AP_EXTERNAL_MLME
 #define WILC_MGMT_PKT		2
-#ifdef WILC_FULLY_HOSTING_AP
-#define WILC_FH_DATA_PKT	4
-#endif	/* WILC_FULLY_HOSTING_AP */
 #endif	/* WILC_AP_EXTERNAL_MLME */
 #define WILC_CFG_SET		1
 #define WILC_CFG_QUERY		0

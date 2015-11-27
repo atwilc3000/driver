@@ -157,8 +157,6 @@ static int sdio_clear_int(void)
 	reg &= ~0x1;
 	sdio_write_reg(WILC_HOST_RX_CTRL_0, reg);
 
-	int_clrd++;
-
 	return 1;
 }
 #else
@@ -172,8 +170,6 @@ static int sdio_clear_int(void)
 	cmd.address = 0x4;
 	cmd.data = 0;
 	g_sdio.sdio_cmd52(&cmd);
-
-	int_clrd++;
 
 	return cmd.data;
 }
@@ -697,7 +693,6 @@ int sdio_init(struct wilc_wlan_inp *inp)
 	g_sdio.has_thrpt_enh3 = 1;
 	PRINT_D(BUS_DBG, "has_thrpt_enh3 = %d\n", g_sdio.has_thrpt_enh3);
 	 	}
-	int_clrd = 0;
 
 	return 1;
 _fail_:

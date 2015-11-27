@@ -44,9 +44,6 @@
 #define WILC_MAC_INDICATE_SCAN		0x2
 
 struct tx_complete_data {
-#ifdef WILC_FULLY_HOSTING_AP
-	struct tx_complete_data *next;
-#endif
 	int size;
 	void *buff;
 	uint8_t *pBssid;
@@ -78,10 +75,6 @@ struct wilc_wlan_oup {
 #if defined(WILC_AP_EXTERNAL_MLME) || defined(WILC_P2P)
 	int (*wlan_add_mgmt_to_tx_que)(void *, uint8_t *,
 				       uint32_t, wilc_tx_complete_func_t);
-#ifdef WILC_FULLY_HOSTING_AP
-	int (*wlan_add_data_to_tx_que)(void *, uint8_t *,
-				       uint32_t, wilc_tx_complete_func_t);
-#endif
 #endif
 };
 

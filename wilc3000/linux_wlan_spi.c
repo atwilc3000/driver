@@ -23,7 +23,7 @@
 #include <linux/slab.h>
 #include <linux/types.h>
 #include <linux/cdev.h>
-#include <asm/uaccess.h>
+#include <linux/uaccess>
 #include <linux/device.h>
 #include <linux/spi/spi.h>
 
@@ -50,19 +50,12 @@ static int wilc_bus_remove(struct spi_device *spi)
 	return 0;
 }
 
-static const struct of_device_id wilc3000_of_match[] = {
-	{ .compatible = "atmel,wilc_spi", },
-	{}
-};
-
-MODULE_DEVICE_TABLE(of, wilc3000_of_match);
 struct spi_driver wilc_bus __refdata = {
-		.driver = {
-				.name = MODALIAS,
-				.of_match_table = wilc3000_of_match,
-		},
-		.probe =  wilc_bus_probe,
-		.remove = __exit_p(wilc_bus_remove),
+	.driver = {
+		.name = MODALIAS,
+	},
+	.probe =  wilc_bus_probe,
+	.remove = __devexit_p(wilc_bus_remove),
 };
 
 void linux_spi_deinit(void *vp)

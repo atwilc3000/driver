@@ -59,12 +59,6 @@ enum BUS_RELEASE {
 	RELEASE_ALLOW_SLEEP	= 1,
 };
 
-enum CHIP_PS_STATE {
-	CHIP_WAKEDUP		= 0,
-	CHIP_SLEEPING_AUTO	= 1,
-	CHIP_SLEEPING_MANUAL	= 2
-};
-
 struct wilc_wlan_os_context {
 	void *os_private;
 	void *hif_critical_section;
@@ -138,8 +132,7 @@ typedef int (*WILCpfChangeCoexMode)(u8);
 
 extern struct wilc_hif_func hif_sdio;
 extern struct wilc_hif_func hif_spi;
-extern enum CHIP_PS_STATE genuChipPSstate;
-extern unsigned int int_clrd;
+
 
 #ifdef WILC_SDIO
 extern struct semaphore sdio_probe_sync;

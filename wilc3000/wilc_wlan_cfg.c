@@ -21,11 +21,6 @@
 #include "wilc_wlan_cfg.h"
 #include "core_configurator.h"
 
-#ifdef WILC_FULLY_HOSTING_AP
-#include "wilc_host_ap.h"
-void WILC_mgm_HOSTAPD_ACK(void *priv, bool bStatus);
-#endif
-
 struct wilc_mac_cfg_t {
 	int mac_status;
 	uint8_t mac_address[7];
@@ -493,18 +488,6 @@ static int wilc_wlan_cfg_indicate_rx(uint8_t *frame, int size, struct wilc_cfg_r
 	uint8_t msg_type;
 	uint8_t msg_id;
 	uint16_t msg_len;
-#ifdef WILC_FULLY_HOSTING_AP
-	unsigned int *ptru32Frame;
-	bool bStatus = frame[2];
-
-#ifdef BIG_ENDIAN
-	ptru32Frame = (frame[4] << 24) | (frame[5] << 16) |
-		      (frame[6] << 8) | frame[7];
-	#else
-	ptru32Frame = (frame[7] << 24) | (frame[6] << 16) |
-		      (frame[5] << 8) | frame[4];
-#endif  /* BIG_ENDIAN */
-#endif  /* WILC_FULLY_HOSTING_AP */
 
 	msg_type = frame[0];
 	msg_id = frame[1];	/* seq no */
@@ -535,12 +518,7 @@ static int wilc_wlan_cfg_indicate_rx(uint8_t *frame, int size, struct wilc_cfg_r
 		GnrlAsyncInfoReceived(frame - 4, size + 4);
 		break;
 	case 'L':
-	#ifndef SWITCH_LOG_TERMINAL
 		PRINT_ER("Unexpected firmware log message received\n");
-	#else
-		PRINT_D(FIRM_DBG, "\nFIRMWARE LOGS :\n<<\n%s\n>>\n", frame);
-		break;
-#endif
 	case 'N':
 		NetworkInfoReceived(frame - 4, size + 4);
 		rsp->type = 0;
@@ -549,16 +527,6 @@ static int wilc_wlan_cfg_indicate_rx(uint8_t *frame, int size, struct wilc_cfg_r
 		PRINT_INFO(RX_DBG,"Scan Notification Received\n");
 		host_int_ScanCompleteReceived(frame - 4, size + 4);
 		break;
-#ifdef WILC_FULLY_HOSTING_AP
-	case 'T':
-		PRINT_INFO(RX_DBG,"TBTT Notification Received\n");
-		process_tbtt_isr();
-		break;
-	case 'A':
-		PRINT_INFO(RX_DBG,"HOSTAPD ACK Notification Received\n");
-		WILC_mgm_HOSTAPD_ACK(ptru32Frame, bStatus);
-		break;
-#endif
 	default:
 		PRINT_INFO(RX_DBG,"unknown message type %d-%d-%d-%d-%d-%d-%d-%d\n",
 			 frame[0], frame[1], frame[2], frame[3], frame[4],

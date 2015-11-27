@@ -992,8 +992,6 @@ static int spi_clear_int(void)
 
 	reg &= ~0x1;
 	spi_write_reg(WILC_HOST_RX_CTRL_0, reg);
-	int_clrd++;
-
 	return 1;
 }
 
@@ -1120,8 +1118,6 @@ static int spi_init(struct wilc_wlan_inp *inp)
 	g_spi.has_thrpt_enh = 1;
 
 	isinit = 1;
-	int_clrd = 0;
-
 	return 1;
 }
 

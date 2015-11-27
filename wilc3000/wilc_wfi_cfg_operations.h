@@ -20,10 +20,6 @@
 #define NM_WFI_CFGOPERATIONS
 #include "wilc_wfi_netdevice.h"
 
-#ifdef WILC_FULLY_HOSTING_AP
-#include "wilc_host_ap.h"
-#endif
-
 extern u8 g_wilc_initialized;
 extern int connecting;
 extern struct timer_list hEAPFrameBuffTimer;

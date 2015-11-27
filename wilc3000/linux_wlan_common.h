@@ -88,6 +88,8 @@ enum debug_region{
 #define MODALIAS	"wilc_spi"
 #define GPIO_NUM	46
 #define MIN_SPEED 24000000
+#define GPIO_NUM_RESET	60
+#define GPIO_NUM_CHIP_EN	94
 #endif
 
 #if defined(PLAT_SAMA5D3)

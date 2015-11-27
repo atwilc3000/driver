@@ -11,7 +11,6 @@ ccflags-y += -Wno-unused-function
 ccflags-y += -DWILC_BT_COEXISTENCE -DDOWNLOAD_BT_FW
 
 wilc3000-y += atl_msg_queue.o
-wilc3000-y += wilc_host_ap.o
 wilc3000-y += wilc_wfi_cfg_operations.o
 wilc3000-y += wilc_wlan.o
 wilc3000-y += wilc_wlan_cfg.o

@@ -21,9 +21,8 @@
 #include "wilc_wlan_if.h"
 #include "wilc_wlan.h"
 #include "linux_wlan.h"
-#ifdef WILC_FULLY_HOSTING_AP
-#include "wilc_host_ap.h"
-#endif /* WILC_FULLY_HOSTING_AP */
+
+
 #ifdef WILC_AP_EXTERNAL_MLME
 
 struct wilc_wfi_radiotap_hdr {
@@ -155,10 +154,10 @@ static void mgmt_tx_complete(void *priv, int status)
 	}
 
 	/* incase of fully hosting mode, the freeing will be done in response to the cfg packet */
-	#ifndef WILC_FULLY_HOSTING_AP
+
 	kfree(pv_data->buff);
 	kfree(pv_data);
-	#endif /* WILC_FULLY_HOSTING_AP */
+
 }
 
 static int mon_mgmt_tx(struct net_device *dev, const u8 *buf, size_t len)
@@ -179,30 +178,16 @@ static int mon_mgmt_tx(struct net_device *dev, const u8 *buf, size_t len)
 		return ATL_FAIL;
 	}
 
-	#ifdef WILC_FULLY_HOSTING_AP
-	/* add space for the pointer to tx_complete_mon_data*/
-	len += sizeof(struct tx_complete_mon_data *);
-	#endif /* WILC_FULLY_HOSTING_AP */
-
 	mgmt_tx->buff = kmalloc(len, GFP_ATOMIC);
 	if (mgmt_tx->buff == NULL) {
+		kfree(mgmt_tx);
 		return ATL_FAIL;
 	}
 
 	mgmt_tx->size = len;
 
-	#ifndef WILC_FULLY_HOSTING_AP
+
 	memcpy(mgmt_tx->buff, buf, len);
-	#else /* WILC_FULLY_HOSTING_AP */
-	memcpy(mgmt_tx->buff, buf, len - sizeof(struct tx_complete_mon_data *));
-	memcpy((mgmt_tx->buff) + (len - sizeof(struct tx_complete_mon_data *)),
-	       &mgmt_tx, sizeof(struct tx_complete_mon_data *));
-
-	/* filter data frames to handle it's PS*/
-	if (filter_monitor_data_frames((mgmt_tx->buff), len) == true)
-		return;
-
-	#endif /* WILC_FULLY_HOSTING_AP */
 
 	g_linux_wlan->oup.wlan_add_mgmt_to_tx_que(mgmt_tx, mgmt_tx->buff,
 					      mgmt_tx->size, mgmt_tx_complete);
@@ -304,62 +289,6 @@ static netdev_tx_t WILC_WFI_mon_xmit(struct sk_buff *skb,
 static const struct net_device_ops wilc_wfi_netdev_ops = {
 	.ndo_start_xmit         = WILC_WFI_mon_xmit,
 };
-
-#ifdef WILC_FULLY_HOSTING_AP
-/*
- * report the status of transmitted mgmt frames to HOSTAPD
- * @priv pointer to tx_complete_mon_data struct 
- * @bStatus status of transmission
- */
-void WILC_mgm_HOSTAPD_ACK(void *priv, bool bStatus)
-{
-	struct sk_buff *skb;
-	struct wilc_wfi_radiotap_cb_hdr *cb_hdr;
-
-	struct tx_complete_mon_data *pv_data = (struct tx_complete_mon_data *)priv;
-	u8 *buf =  pv_data->buff;
-
-	/* len of the original frame without the added pointer at the tail*/
-	u16 u16len = (pv_data->size) - sizeof(struct tx_complete_mon_data *);
-
-	{
-		skb = dev_alloc_skb(u16len + sizeof(struct wilc_wfi_radiotap_cb_hdr));
-
-		memcpy(skb_put(skb, u16len), pv_data->buff, u16len);
-
-		cb_hdr = (struct wilc_wfi_radiotap_cb_hdr *)skb_push(skb, sizeof(*cb_hdr));
-		memset(cb_hdr, 0, sizeof(struct wilc_wfi_radiotap_cb_hdr));
-
-		cb_hdr->hdr.it_version = 0; /* PKTHDR_RADIOTAP_VERSION; */
-
-		cb_hdr->hdr.it_len = cpu_to_le16(sizeof(struct wilc_wfi_radiotap_cb_hdr));
-
-		cb_hdr->hdr.it_present = cpu_to_le32(
-				(1 << IEEE80211_RADIOTAP_RATE) |
-				(1 << IEEE80211_RADIOTAP_TX_FLAGS));
-
-		cb_hdr->rate = 5;
-
-		if (bStatus)
-			cb_hdr->tx_flags = IEEE80211_RADIOTAP_F_TX_RTS;
-		else
-			cb_hdr->tx_flags = IEEE80211_RADIOTAP_F_TX_FAIL;
-
-		skb->dev = wilc_wfi_mon;
-		skb_set_mac_header(skb, 0);
-		skb->ip_summed = CHECKSUM_UNNECESSARY;
-		skb->pkt_type = PACKET_OTHERHOST;
-		skb->protocol = htons(ETH_P_802_2);
-		memset(skb->cb, 0, sizeof(skb->cb));
-
-		netif_rx(skb);
-	}
-
-	/* incase of fully hosting mode, the freeing will be done in response to the cfg packet */
-	kfree(pv_data->buff);
-	kfree(pv_data);
-}
-#endif /* WILC_FULLY_HOSTING_AP */
 
 static void WILC_WFI_mon_setup(struct net_device *dev)
 {
