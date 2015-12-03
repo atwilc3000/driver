@@ -6,7 +6,7 @@ Atmel SmartConnect is a family of self-contained, low power and certified module
 
 **ATWILC3000** is IEEE 802.11 b/g/n/BT4.0 IOT link controller utilizing highly optimized 802.11-Bluetooth coexistence protocol and provides mulitple peripheral interfaces like UART, SPI, and SDIO.
 
-The default baud rate of bluetooth is 115200 without flow control packaged in the release package. Users may want to change the baud rate. for more infomation on [bluetooth wiki](https://github.com/atwilc3000/driver/wiki/bluetooth).
+The default baud rate of bluetooth is 115200 without flow control packaged in the release package. Users may want to change the baud rate. Visit [bluetooth wiki](https://github.com/atwilc3000/driver/wiki/bluetooth).
 
 Refer to the [wiki](https://github.com/atwilc3000/driver/wiki) to find more instructions and information for wireless solutions.
 
