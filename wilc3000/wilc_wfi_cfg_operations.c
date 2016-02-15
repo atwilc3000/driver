@@ -572,7 +572,7 @@ static void CfgConnectResult(enum tenuConnDisconnEvent enuConnDisconnEvent,
 			 * (which means something wrong happened)
 			 */
 			u16ConnectStatus = WLAN_STATUS_UNSPECIFIED_FAILURE;
-			linux_wlan_set_bssid(priv->dev, NullBssid);
+			linux_wlan_set_bssid(priv->dev, NullBssid, STATION_MODE);
 			memset(u8ConnectedSSID, 0, ETH_ALEN);
 
 			/* Invalidate u8WLANChannel value on wlan0 disconnect */
@@ -633,7 +633,7 @@ static void CfgConnectResult(enum tenuConnDisconnEvent enuConnDisconnEvent,
 		u8P2Precvrandom = 0x00;
 		bAtwilc_ie = false;
 		memset(priv->au8AssociatedBss, 0, ETH_ALEN);
-		linux_wlan_set_bssid(priv->dev, NullBssid);
+		linux_wlan_set_bssid(priv->dev, NullBssid, STATION_MODE);
 		memset(u8ConnectedSSID, 0, ETH_ALEN);
 
 		/* Invalidate u8WLANChannel value on wlan0 disconnect */
@@ -1008,7 +1008,7 @@ static int WILC_WFI_CfgConnect(struct wiphy *wiphy, struct net_device *dev,
 	if (!pstrWFIDrv->u8P2PConnect)
 		u8WLANChannel = pstrNetworkInfo->u8channel;
 
-	linux_wlan_set_bssid(dev, pstrNetworkInfo->au8bssid);
+	linux_wlan_set_bssid(dev, pstrNetworkInfo->au8bssid, STATION_MODE);
 
 	s32Error = host_int_set_join_req(priv->hWILCWFIDrv, pstrNetworkInfo->au8bssid, sme->ssid,
 					 sme->ssid_len, sme->ie, sme->ie_len,
@@ -1050,7 +1050,7 @@ static int WILC_WFI_disconnect(struct wiphy *wiphy,
 	if (!pstrWFIDrv->u8P2PConnect)
 		u8WLANChannel = INVALID_CHANNEL;
 #endif
-	linux_wlan_set_bssid(priv->dev, NullBssid);
+	linux_wlan_set_bssid(priv->dev, NullBssid, STATION_MODE);
 
 	PRINT_D(CFG80211_DBG, "Disconnecting with reason code(%d)\n", reason_code);
 
@@ -1100,8 +1100,7 @@ static int WILC_WFI_add_key(struct wiphy *wiphy, struct net_device *netdev,
 	case WLAN_CIPHER_SUITE_WEP40:
 	case WLAN_CIPHER_SUITE_WEP104:
 	#ifdef WILC_AP_EXTERNAL_MLME
-		if (priv->wdev->iftype == NL80211_IFTYPE_AP) {
-			priv->WILC_WFI_wep_default = key_index;
+		if (priv->wdev->iftype == NL80211_IFTYPE_AP) {		
 			priv->WILC_WFI_wep_key_len[key_index] = params->key_len;
 			memcpy(priv->WILC_WFI_wep_key[key_index], params->key, params->key_len);
 
@@ -1524,8 +1523,7 @@ static int WILC_WFI_set_default_key(struct wiphy *wiphy,
 
 	PRINT_D(CFG80211_DBG, "Setting default key with idx = %d\n", key_index);
 
-	if (key_index != priv->WILC_WFI_wep_default)
-		host_int_set_WEPDefaultKeyID(priv->hWILCWFIDrv, key_index);
+	host_int_set_WEPDefaultKeyID(priv->hWILCWFIDrv, key_index);
 
 	return s32Error;
 }
@@ -2846,14 +2844,14 @@ static int WILC_WFI_start_ap(struct wiphy *wiphy, struct net_device *dev,
 		if(g_linux_wlan->strInterfaceInfo[i].wilc_netdev == dev)
 		{
 			PRINT_D(CFG80211_DBG,"Starting AP on interface %d\n", i);
-			linux_wlan_set_bssid(dev,g_linux_wlan->strInterfaceInfo[i].aSrcAddress);
+			linux_wlan_set_bssid(dev,g_linux_wlan->strInterfaceInfo[i].aSrcAddress, AP_MODE);
 		}		
 	}
 
 	PRINT_D(CFG80211_DBG, "Interval = %d\n DTIM period = %d\n Head length = %d Tail length = %d\n",
 		settings->beacon_interval, settings->dtim_period, beacon->head_len, beacon->tail_len);
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 6, 0)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3,8,0)
 	s32Error = WILC_WFI_CfgSetChannel(wiphy, &settings->chandef);
 
 	if (s32Error != ATL_SUCCESS)
@@ -2921,7 +2919,7 @@ static int  WILC_WFI_stop_ap(struct wiphy *wiphy, struct net_device *dev)
 	PRINT_D(CFG80211_DBG, "Deleting beacon\n");
 
 	/*BugID_5188*/
-	linux_wlan_set_bssid(dev, NullBssid);
+	linux_wlan_set_bssid(dev, NullBssid, AP_MODE);
 
 	s32Error = host_int_del_beacon(priv->hWILCWFIDrv);
 
@@ -2964,7 +2962,7 @@ static int WILC_WFI_add_beacon(struct wiphy *wiphy, struct net_device *dev,
 		if(g_linux_wlan->strInterfaceInfo[i].wilc_netdev == dev)
 		{
 			PRINT_D(CFG80211_DBG,"Adding Beacon on interface %d\n", i);
-			linux_wlan_set_bssid(dev,g_linux_wlan->strInterfaceInfo[i].aSrcAddress);
+			linux_wlan_set_bssid(dev,g_linux_wlan->strInterfaceInfo[i].aSrcAddress, AP_MODE);
 		}		
 	}
 
@@ -3020,7 +3018,7 @@ static int  WILC_WFI_del_beacon(struct wiphy *wiphy, struct net_device *dev)
 	PRINT_D(CFG80211_DBG, "Deleting beacon\n");
 
 	/*BugID_5188*/
-	linux_wlan_set_bssid(dev, NullBssid);
+	linux_wlan_set_bssid(dev, NullBssid, AP_MODE);
 
 	s32Error = host_int_del_beacon(priv->hWILCWFIDrv);
 

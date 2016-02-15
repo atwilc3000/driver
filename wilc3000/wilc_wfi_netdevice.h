@@ -186,6 +186,7 @@ struct InterfaceInfo {
 	uint8_t aSrcAddress[ETH_ALEN];
 	uint8_t aBSSID[ETH_ALEN];
 	uint32_t drvHandler;
+	uint8_t u8IfcType;
 	struct net_device *wilc_netdev;
 };
 

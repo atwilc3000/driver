@@ -2679,28 +2679,25 @@ static int Handle_Key(void *drvHandler, struct tstrHostIFkeyAttr *pstrHostIFkeyA
 			strWIDList[1].s32ValueSize = sizeof(char);
 			strWIDList[1].ps8WidVal = (s8 *)(&(pstrHostIFkeyAttr->uniHostIFkeyAttr.strHostIFwepAttr.tenuAuth_type));
 
-			strWIDList[2].u16WIDid = (u16)WID_KEY_ID;
-			strWIDList[2].enuWIDtype = WID_CHAR;
-
-			strWIDList[2].ps8WidVal	= (s8 *)(&(pstrHostIFkeyAttr->uniHostIFkeyAttr.strHostIFwepAttr.u8Wepidx));
-			strWIDList[2].s32ValueSize = sizeof(char);
-
-			pu8keybuf = kmalloc(pstrHostIFkeyAttr->uniHostIFkeyAttr.strHostIFwepAttr.u8WepKeylen, GFP_ATOMIC);
+			pu8keybuf = kmalloc(pstrHostIFkeyAttr->uniHostIFkeyAttr.strHostIFwepAttr.u8WepKeylen + 2, GFP_ATOMIC);
 
 			if (pu8keybuf == NULL)
 				return -1;
 
-			memcpy(pu8keybuf, pstrHostIFkeyAttr->uniHostIFkeyAttr.strHostIFwepAttr.pu8WepKey,
+			pu8keybuf[0] = pstrHostIFkeyAttr->uniHostIFkeyAttr.strHostIFwepAttr.u8Wepidx;
+			pu8keybuf[1] = pstrHostIFkeyAttr->uniHostIFkeyAttr.strHostIFwepAttr.u8WepKeylen;
+			
+			memcpy(&pu8keybuf[2], pstrHostIFkeyAttr->uniHostIFkeyAttr.strHostIFwepAttr.pu8WepKey,
 			       pstrHostIFkeyAttr->uniHostIFkeyAttr.strHostIFwepAttr.u8WepKeylen);
 
 			kfree(pstrHostIFkeyAttr->uniHostIFkeyAttr.strHostIFwepAttr.pu8WepKey);
 
-			strWIDList[3].u16WIDid = (u16)WID_WEP_KEY_VALUE;
-			strWIDList[3].enuWIDtype = WID_STR;
-			strWIDList[3].s32ValueSize = pstrHostIFkeyAttr->uniHostIFkeyAttr.strHostIFwepAttr.u8WepKeylen;
-			strWIDList[3].ps8WidVal = (s8 *)pu8keybuf;
+			strWIDList[2].u16WIDid = (u16)WID_WEP_KEY_VALUE;
+			strWIDList[2].enuWIDtype = WID_STR;
+			strWIDList[2].s32ValueSize = pstrHostIFkeyAttr->uniHostIFkeyAttr.strHostIFwepAttr.u8WepKeylen + 2;
+			strWIDList[2].ps8WidVal = (s8 *)pu8keybuf;
 
-			s32Error = SendConfigPkt(SET_CFG, strWIDList, 4, true, driver_handler_id);
+			s32Error = SendConfigPkt(SET_CFG, strWIDList, 3, true, driver_handler_id);
 			kfree(pu8keybuf);
 		}
 #endif /* WILC_AP_EXTERNAL_MLME */
@@ -2738,7 +2735,7 @@ static int Handle_Key(void *drvHandler, struct tstrHostIFkeyAttr *pstrHostIFkeyA
 			strWID.s32ValueSize = 1;
 
 			s32Error = SendConfigPkt(SET_CFG, &strWID, 1, true, driver_handler_id);
-		} else {
+		} else if(pstrHostIFkeyAttr->u8KeyAction & DEFAULTKEY) {
 			strWID.u16WIDid	= (u16)WID_KEY_ID;
 			strWID.enuWIDtype = WID_CHAR;
 			strWID.ps8WidVal = (s8 *)(&(pstrHostIFkeyAttr->uniHostIFkeyAttr.strHostIFwepAttr.u8Wepidx));

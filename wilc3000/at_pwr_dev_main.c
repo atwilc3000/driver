@@ -71,6 +71,8 @@ static struct cdev str_chc_dev; /* Global variable for the character
 static struct class *chc_dev_class; /* Global variable for the device class */
 struct device *dev;
 struct pwr_dev_t pwr_dev;
+int bt_init_done=0;
+int (*pf_is_wilc3000_initalized)(void)=NULL;
 
 #ifdef WILC_SDIO
 struct semaphore sdio_probe_sync;
@@ -394,6 +396,7 @@ static int cmd_handle_bt_power_up(int source)
 	unsigned int reg;
 	
 	PRINT_D(PWRDEV_DBG, "AT PWR: bt_power_up\n");
+	bt_init_done=0;
 	ret = at_pwr_power_up(PWR_DEV_SRC_BT);
 	if(ret != 0){
 		goto _fail_1; 
@@ -635,6 +638,7 @@ static int cmd_handle_bt_power_down(int source)
 	
 	}
 
+	bt_init_done=0;
 	at_pwr_unregister_bus(PWR_DEV_SRC_BT);
 	at_pwr_power_down(PWR_DEV_SRC_BT);
 
@@ -690,6 +694,7 @@ static int cmd_handle_bt_fw_chip_wake_up(int source)
 
 static int cmd_handle_bt_fw_chip_allow_sleep(int source)
 {
+	bt_init_done=1;
 	chip_allow_sleep(source);
 	return 0;
 }
@@ -897,6 +902,8 @@ int at_pwr_power_up(int source)
 {
 	mutex_lock(&pwr_dev.cs);
 
+	int count=0;
+
 	PRINT_D(PWRDEV_DBG, "source: %s, current bus status Wifi: %d, BT: %d\n",
 		 (source == PWR_DEV_SRC_WIFI ? "Wifi" : "BT"),
 		 pwr_dev.power_status[PWR_DEV_SRC_WIFI],
@@ -905,7 +912,41 @@ int at_pwr_power_up(int source)
 	if (pwr_dev.power_status[source] == true) {
 		PRINT_ER("power up request for already powered up source %s\n",
 			 (source == PWR_DEV_SRC_WIFI ? "Wifi" : "BT"));
-	} else if ((pwr_dev.power_status[PWR_DEV_SRC_WIFI] == true) ||
+		}
+	else
+	{
+		/*Bug 215*/
+		/*Avoid overlapping between BT and Wifi intialization*/
+		if((pwr_dev.power_status[PWR_DEV_SRC_WIFI]==true))
+		{
+			while(!pf_is_wilc3000_initalized())
+			{
+				msleep(100);
+				if(++count>20)
+				{
+					PRINT_D(GENERIC_DBG,"Error: Wifi has taken too much time to initialize \n");
+					break;
+				}
+			}
+		}
+		else if((pwr_dev.power_status[PWR_DEV_SRC_BT]==true))
+		{
+			while(!bt_init_done)
+			{
+				msleep(200);
+				if(++count>30)
+				{
+					PRINT_D(GENERIC_DBG,"Error: BT has taken too much time to initialize \n");
+					break;
+				}
+			}
+			/*An additional wait to give BT firmware time to do CPLL update as the time 
+			measured since the start of BT Fw till the end of function "rf_nmi_init_tuner" was 71.2 ms */	
+			msleep(100);
+		}
+	}
+
+	if ((pwr_dev.power_status[PWR_DEV_SRC_WIFI] == true) ||
 		   (pwr_dev.power_status[PWR_DEV_SRC_BT] == true)) {
 		PRINT_WRN(PWRDEV_DBG, "Device already up. request source is %s\n",
 			 (source == PWR_DEV_SRC_WIFI ? "Wifi" : "BT"));
@@ -914,7 +955,6 @@ int at_pwr_power_up(int source)
 		linux_wlan_device_power(0);
 		linux_wlan_device_power(1);
 		msleep(100);
-
 	}
 	pwr_dev.power_status[source] = true;
 	mutex_unlock(&pwr_dev.cs);
@@ -1144,6 +1184,13 @@ void set_pf_get_u8SuspendOnEvent_value(int (*get_u8SuspendOnEvent_val)(void))
 	pf_get_u8SuspendOnEvent_value=get_u8SuspendOnEvent_val;
 }
 EXPORT_SYMBOL(set_pf_get_u8SuspendOnEvent_value);
+
+void set_pf_is_wilc3000_initalized(int (*is_wilc3000_initalized_address)( void ))
+{
+	pf_is_wilc3000_initalized=is_wilc3000_initalized_address;
+	
+}
+EXPORT_SYMBOL(set_pf_is_wilc3000_initalized);
 
 module_init(at_pwr_dev_init);
 module_exit(at_pwr_dev_deinit);

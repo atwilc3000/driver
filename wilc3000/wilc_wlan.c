@@ -1333,6 +1333,7 @@ static int wilc_bt_firmware_download(const uint8_t *buffer, uint32_t buffer_size
 		PRINT_ER("Can't download BT firmware IO error\n");
 		goto _fail_;
 	}
+	PRINT_D(GENERIC_DBG, "BT Addr = %d\n", addr);
 	PRINT_D(GENERIC_DBG, "BT Offset = %d\n", offset);
 
 _fail_:

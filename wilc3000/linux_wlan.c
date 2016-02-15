@@ -641,35 +641,41 @@ void EAP_buff_timeout(unsigned long pUserVoid)
 
 struct net_device *GetIfHandler(uint8_t *pMacHeader)
 {
-	uint8_t *Bssid, *Bssid1;
+	uint8_t *Bssid, *Bssid1,offset = 10;
 	int i = 0;
 
 	Bssid  = pMacHeader + 10;
 	Bssid1 = pMacHeader + 4;
 
-	for (i = 0; i < g_linux_wlan->u8NoIfcs; i++) {
-		if (!memcmp(Bssid1, g_linux_wlan->strInterfaceInfo[i].aBSSID, ETH_ALEN) ||
-		    !memcmp(Bssid, g_linux_wlan->strInterfaceInfo[i].aBSSID, ETH_ALEN))
-
-			return g_linux_wlan->strInterfaceInfo[i].wilc_netdev;
-	}
-	PRINT_WRN(GENERIC_DBG, "Invalide handle\n");
-
-	Bssid  = pMacHeader + 18;
-	Bssid1 = pMacHeader + 12;
-	for (i = 0; i < g_linux_wlan->u8NoIfcs; i++) {
-		if (!memcmp(Bssid1, g_linux_wlan->strInterfaceInfo[i].aBSSID, ETH_ALEN) ||
-		    !memcmp(Bssid, g_linux_wlan->strInterfaceInfo[i].aBSSID, ETH_ALEN))	{
-			PRINT_D(GENERIC_DBG, "Ctx [%p]\n", g_linux_wlan->strInterfaceInfo[i].wilc_netdev);
-			return g_linux_wlan->strInterfaceInfo[i].wilc_netdev;
+	offset = 10;
+	for(i=0;i<g_linux_wlan->u8NoIfcs;i++)
+	{
+		if(g_linux_wlan->strInterfaceInfo[i].u8IfcType == STATION_MODE)
+		{
+			if(!memcmp(pMacHeader+offset,g_linux_wlan->strInterfaceInfo[i].aBSSID,ETH_ALEN))			
+			{
+				return g_linux_wlan->strInterfaceInfo[i].wilc_netdev;
+			}
 		}
 	}
-	PRINT_D(GENERIC_DBG, "\n");
+	offset = 4;
+	for(i=0;i<g_linux_wlan->u8NoIfcs;i++)
+	{
+		if(g_linux_wlan->strInterfaceInfo[i].u8IfcType == AP_MODE)
+		{
+			if(!memcmp(pMacHeader+offset,g_linux_wlan->strInterfaceInfo[i].aBSSID,ETH_ALEN))			
+			{				
+				return g_linux_wlan->strInterfaceInfo[i].wilc_netdev;
+			}
+		}
+	}
 
+	PRINT_WRN(GENERIC_DBG, "Invalide handle\n");
+	
 	return NULL;
 }
 
-int linux_wlan_set_bssid(struct net_device *wilc_netdev, uint8_t *pBSSID)
+int linux_wlan_set_bssid(struct net_device *wilc_netdev, uint8_t *pBSSID, uint8_t mode)
 {
 	int i = 0;
 	int ret = -1;
@@ -679,6 +685,7 @@ int linux_wlan_set_bssid(struct net_device *wilc_netdev, uint8_t *pBSSID)
 		if (g_linux_wlan->strInterfaceInfo[i].wilc_netdev == wilc_netdev) {
 			PRINT_D(GENERIC_DBG, "set bssid [%x][%x][%x]\n", pBSSID[0], pBSSID[1], pBSSID[2]);
 			memcpy(g_linux_wlan->strInterfaceInfo[i].aBSSID, pBSSID, 6);
+			g_linux_wlan->strInterfaceInfo[i].u8IfcType = mode;
 			ret = 0;
 			break;
 		}
@@ -706,20 +713,35 @@ int linux_wlan_get_num_conn_ifcs(void)
 #ifdef WILC_BT_COEXISTENCE
 int linux_wlan_change_bt_coex_mode(u8 u8BtCoexMode)
 {
-	struct WILC_WFIDrv * pstrWFIDrv;
+	struct WILC_WFIDrv * pstrWFIDrv=NULL;
 	struct WILC_WFI_priv* priv;
 	struct net_device * dev;
-
-	dev = g_linux_wlan->strInterfaceInfo[0].wilc_netdev;
-	priv = wiphy_priv(dev->ieee80211_ptr->wiphy);
-	if(priv == NULL)
+	uint8_t i = 0;
+	
+	/*Bug 215*/
+	/*Use the firstly intialized and ready interface to send the WID to the firmware*/
+	for (i = 0; i < g_linux_wlan->u8NoIfcs; i++)
 	{
-		PRINT_ER("No Wireless Priv\n");
+		dev = g_linux_wlan->strInterfaceInfo[i].wilc_netdev;
+		priv = wiphy_priv(dev->ieee80211_ptr->wiphy);
+		if(priv == NULL)
+		{
+			PRINT_ER("No Wireless Priv\n");
+			return -1;
+		}
+		pstrWFIDrv = (struct WILC_WFIDrv *)priv->hWILCWFIDrv;
+		if(pstrWFIDrv)
+			break;
+	}
+	
+	if(pstrWFIDrv)
+		host_int_change_bt_coex_mode((struct WFIDrvHandle*)pstrWFIDrv, u8BtCoexMode);
+	else
+	{
+		PRINT_ER("No driver handler initialized\n");
 		return -1;
 	}
 	
-	pstrWFIDrv = (struct WILC_WFIDrv *)priv->hWILCWFIDrv;
-	host_int_change_bt_coex_mode((struct WFIDrvHandle*)pstrWFIDrv, u8BtCoexMode);
 	return 0;
 }
 #endif /*WILC_BT_COEXISTENCE*/
@@ -1559,6 +1581,11 @@ void linux_wlan_free_firmware(void)
 	PRINT_D(INIT_DBG, "Releasing firmware\n");
 	release_firmware(g_linux_wlan->wilc_firmware);
 	g_linux_wlan->wilc_firmware = NULL;
+}
+
+int is_wilc3000_initalized(void)
+{
+	return g_linux_wlan->wilc_initialized ;
 }
 
 int wilc_wlan_init(struct net_device *dev, struct perInterface_wlan *p_nic)
@@ -2421,27 +2448,28 @@ static int __init init_wilc_driver(void)
 {
 	int ret = 0;
 
-	PRINT_D(INIT_DBG, "WILC3000 driver v11\n");
+	PRINT_D(INIT_DBG, "WILC3000 driver v11.2\n");
 	set_pf_chip_sleep_manually(chip_sleep_manually);
 	set_pf_get_num_conn_ifcs( linux_wlan_get_num_conn_ifcs);
 	set_pf_host_wakeup_notify(wilc_host_wakeup_notify);
 	set_pf_host_sleep_notify(wilc_host_sleep_notify);
 	set_pf_get_u8SuspendOnEvent_value(WILC_WFI_get_u8SuspendOnEvent_value);
+	set_pf_is_wilc3000_initalized(is_wilc3000_initalized);
 	at_pwr_power_up(PWR_DEV_SRC_WIFI);
 	ret = at_pwr_register_bus(PWR_DEV_SRC_WIFI);
 
 	if (ret < 0)
 		return ret;
 	
+	PRINT_D(INIT_DBG, "Initializing netdev\n");
+	if (wilc_netdev_init())
+		PRINT_ER("Couldn't initialize netdev\n");
+	
 	/*TicketId883*/
 	/*Pass to pwr dev a function pointer to change coex mode*/
 	#ifdef WILC_BT_COEXISTENCE
 	wilc_set_pf_change_coex_mode(linux_wlan_change_bt_coex_mode);
 	#endif
-	
-	PRINT_D(INIT_DBG, "Initializing netdev\n");
-	if (wilc_netdev_init())
-		PRINT_ER("Couldn't initialize netdev\n");
 
 	PRINT_D(INIT_DBG, "Device has been initialized successfully\n");
 	return 0;

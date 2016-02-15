@@ -196,6 +196,8 @@ void set_pf_host_wakeup_notify(void (*host_wakeup_notify_address)( int ));
 void set_pf_host_sleep_notify(void (*host_sleep_notify_address)( int ));
 
 void set_pf_get_u8SuspendOnEvent_value(int (*get_u8SuspendOnEvent_val)(void));
+void set_pf_is_wilc3000_initalized(int (*is_wilc3000_initalized_address)(void ));
+
 void acquire_bus(enum BUS_ACQUIRE acquire, int source);
 void release_bus(enum BUS_RELEASE release, int source);
 struct mutex *at_pwr_dev_get_bus_lock(void);

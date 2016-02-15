@@ -39,7 +39,7 @@ int mac_close(struct net_device *ndev);
 void EAP_buff_timeout(unsigned long pUserVoid);
 void wilc_wlan_deinit(struct linux_wlan *nic);
 void frmw_to_linux(uint8_t *buff, uint32_t size, uint32_t pkt_offset);
-int linux_wlan_set_bssid(struct net_device *wilc_netdev, uint8_t *pBSSID);
+int linux_wlan_set_bssid(struct net_device *wilc_netdev, uint8_t *pBSSID, uint8_t mode);
 int wilc_wlan_init(struct net_device *dev, struct perInterface_wlan *p_nic);
 void linux_wlan_enable_irq(void);
 
