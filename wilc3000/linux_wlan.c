@@ -526,7 +526,7 @@ static int init_irq(struct linux_wlan *p_nic)
 	if ((gpio_request(GPIO_NUM, "WILC_INTR") == 0) &&
 	    (gpio_direction_input(GPIO_NUM) == 0)) {
 		gpio_export(GPIO_NUM, 1);
-		nic->dev_irq_num = OMAP_GPIO_IRQ(GPIO_NUM);
+		nic->dev_irq_num = gpio_to_irq(GPIO_NUM);
 		irq_set_irq_type(nic->dev_irq_num, IRQ_TYPE_LEVEL_LOW);
 	} else {
 		ret = -1;
