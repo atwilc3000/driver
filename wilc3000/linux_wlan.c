@@ -2448,7 +2448,7 @@ static int __init init_wilc_driver(void)
 {
 	int ret = 0;
 
-	PRINT_D(INIT_DBG, "WILC3000 driver v11.2\n");
+	PRINT_D(INIT_DBG, "WILC3000 driver v11.2.1\n");
 	set_pf_chip_sleep_manually(chip_sleep_manually);
 	set_pf_get_num_conn_ifcs( linux_wlan_get_num_conn_ifcs);
 	set_pf_host_wakeup_notify(wilc_host_wakeup_notify);

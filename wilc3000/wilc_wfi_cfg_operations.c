@@ -656,8 +656,13 @@ static void CfgConnectResult(enum tenuConnDisconnEvent enuConnDisconnEvent,
 		else if ((!pstrWFIDrv->IFC_UP) && (dev == g_linux_wlan->strInterfaceInfo[1].wilc_netdev))
 			pstrDisconnectNotifInfo->u16reason = 1;
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 2, 0)
 		cfg80211_disconnected(dev, pstrDisconnectNotifInfo->u16reason, pstrDisconnectNotifInfo->ie,
-				      pstrDisconnectNotifInfo->ie_len, GFP_KERNEL);
+						      pstrDisconnectNotifInfo->ie_len, false, GFP_KERNEL);
+#else
+		cfg80211_disconnected(dev, pstrDisconnectNotifInfo->u16reason, pstrDisconnectNotifInfo->ie,
+						      pstrDisconnectNotifInfo->ie_len, GFP_KERNEL);
+#endif
 	}
 }
 
@@ -2135,11 +2140,15 @@ void WILC_WFI_p2p_rx(struct net_device *dev, uint8_t *buff, uint32_t size)
 					if ((buff[P2P_PUB_ACTION_SUBTYPE] == GO_NEG_REQ || buff[P2P_PUB_ACTION_SUBTYPE] == GO_NEG_RSP) && (bAtwilc_ie)) {
 						PRINT_D(GENERIC_DBG, "Sending P2P to host without extra elemnt\n");
 						/* extra attribute for sig_dbm: signal strength in mBm, or 0 if unknown */
-					#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 6, 0))
+					#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 18, 0))
+							cfg80211_rx_mgmt(priv->wdev,s32Freq, 0, buff,size-7,0);
+					#elif (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 12, 0))
+							cfg80211_rx_mgmt(priv->wdev,s32Freq, 0, buff,size-7,0,GFP_ATOMIC);
+					#elif (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 6, 0))
 						cfg80211_rx_mgmt(priv->wdev, s32Freq, 0, buff, size - 7, GFP_ATOMIC);
 					#elif (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 4, 0))
 						cfg80211_rx_mgmt(dev, s32Freq, 0, buff, size - 7, GFP_ATOMIC);
-					#else
+					#elif (LINUX_VERSION_CODE < KERNEL_VERSION(3,4,0))
 						cfg80211_rx_mgmt(dev, s32Freq, buff, size - 7, GFP_ATOMIC);
 					#endif
 						return;
@@ -2154,11 +2163,15 @@ void WILC_WFI_p2p_rx(struct net_device *dev, uint8_t *buff, uint32_t size)
 				}
 			}
 		}
-	#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 6, 0))
+	#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 18 ,0))
+		cfg80211_rx_mgmt(priv->wdev,s32Freq, 0, buff, size, 0);
+	#elif (LINUX_VERSION_CODE >= KERNEL_VERSION(3,12,0))
+		cfg80211_rx_mgmt(priv->wdev,s32Freq, 0, buff, size, 0, GFP_ATOMIC);
+	#elif (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 6, 0))
 		cfg80211_rx_mgmt(priv->wdev, s32Freq, 0, buff, size, GFP_ATOMIC);
 	#elif (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 4, 0))
 		cfg80211_rx_mgmt(dev, s32Freq, 0, buff, size, GFP_ATOMIC);
-	#else
+	#elif (LINUX_VERSION_CODE < KERNEL_VERSION(3,4,0))
 		cfg80211_rx_mgmt(dev, s32Freq, buff, size, GFP_ATOMIC);
 	#endif
 	}
@@ -2305,27 +2318,57 @@ void WILC_WFI_add_wilcvendorspec(u8 *buff)
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,37)
 int WILC_WFI_mgmt_tx(struct wiphy *wiphy,
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 6, 0))
-		       struct wireless_dev *wdev,
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 14, 0)
+			struct wireless_dev *wdev,
+			struct cfg80211_mgmt_tx_params *params,
+			u64 *cookie)
+#elif (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 8, 0))
+			struct wireless_dev *wdev,
+			struct ieee80211_channel *chan,
+			bool offchan,
+			unsigned int wait,
+			const u8 *buf,
+			size_t len,
+			bool no_cck,
+			bool dont_wait_for_ack, u64 *cookie)
+#elif (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 6, 0))
+			struct wireless_dev *wdev,
+			struct ieee80211_channel *chan, bool offchan,
+			enum nl80211_channel_type channel_type,
+			bool channel_type valid,
+			unsigned int wait, const u8 *buf,
+			size_t len, bool no_cck,
+			bool dont_wait_for_ack, u64 *cookie)
+#elif (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 3, 0))
+			struct net_device *dev,
+			struct ieee80211_channel *chan, bool offchan,
+			enum nl80211_channel_type channel_type,
+			bool channel_type_valid,
+			unsigned int wait, const u8 *buf,
+			size_t len, bool no_cck,
+			bool dont_wait_for_ack, u64 *cookie)
+#elif (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 2, 0))
+			struct net_device *dev,
+			struct ieee80211_channel *chan, bool offchan,
+			enum nl80211_channel_type channel_type,
+			bool channel_type_valid,
+			unsigned int wait, const u8 *buf,
+			size_t len, bool no_cck, u64 *cookie)
 #else
-		       struct net_device *dev,
+			struct net_device *dev,
+			struct ieee80211_channel *chan, bool offchan,
+			enum nl80211_channel_type channel_type,
+			bool channel_type_valid,
+			unsigned int wait, const u8 *buf,
+			size_t len, u64 *cookie)
 #endif
-		       struct ieee80211_channel *chan, bool offchan,
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(3, 8, 0))
-		       enum nl80211_channel_type channel_type,
-		       bool channel_type_valid,
-#endif
-		       unsigned int wait,
-		       const u8 *buf,
-		       size_t len,
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 2, 0))
-		       bool no_cck,
-#endif
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 3, 0))
-		       bool dont_wait_for_ack,
-#endif
-		       u64 *cookie)
 {
+	#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 14, 0)
+	struct ieee80211_channel *chan = params->chan;
+	unsigned int wait = params->wait;
+	const u8 *buf = params->buf;
+	size_t len = params->len;
+	#endif
 	const struct ieee80211_mgmt *mgmt;
 	struct p2p_mgmt_data *mgmt_tx;
 	struct WILC_WFI_priv *priv;
@@ -3113,8 +3156,15 @@ static int  WILC_WFI_add_station(struct wiphy *wiphy, struct net_device *dev,
  *  @version	1.0
  */
 static int WILC_WFI_del_station(struct wiphy *wiphy, struct net_device *dev,
-				  u8 *mac)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 19, 0)
+				struct station_del_parameters *params)
+#else
+				u8 *mac)
+#endif
 {
+	#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 19, 0)
+	u8 *mac = params->mac;
+	#endif
 	signed int s32Error = ATL_SUCCESS;
 	struct WILC_WFI_priv *priv;
 	struct perInterface_wlan *nic;
@@ -3362,6 +3412,10 @@ int WILC_WFI_get_tx_power(struct wiphy *wiphy,
 	signed int  s32Error = ATL_SUCCESS;
 	struct WILC_WFI_priv* priv = wiphy_priv(wiphy);
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 4, 0)
+	if(!g_linux_wlan->wilc_initialized)
+		return ATL_FAIL;
+#endif
 	s32Error = host_int_get_tx_power(priv->hWILCWFIDrv, (u8*)(dbm));
 	PRINT_D(CFG80211_DBG, "Got tx power %d\n", *dbm);
 
@@ -3566,6 +3620,11 @@ _fail_:
 	return NULL;
 }
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 11, 0)
+static const struct wiphy_wowlan_support wowlan_support = {
+        .flags = WIPHY_WOWLAN_ANY
+};
+#endif
 /**
  *  @brief      WILC_WFI_WiphyRegister
  *  @details    Registering of the wiphy structure and interface modes
@@ -3598,6 +3657,11 @@ struct wireless_dev *WILC_WFI_WiphyRegister(struct net_device *net)
 
 	/*Maximum number of probed ssid to be added by user for the scan request*/
 	wdev->wiphy->max_scan_ssids = MAX_NUM_PROBED_SSID;
+	#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 11, 0)
+	wdev->wiphy->wowlan = &wowlan_support;
+	#elif LINUX_VERSION_CODE > KERNEL_VERSION(3,0,0)
+	wdev->wiphy->wowlan.flags = WIPHY_WOWLAN_ANY;
+	#endif
 	#if LINUX_VERSION_CODE > KERNEL_VERSION(2, 6, 32)
 	/*Maximum number of pmkids to be cashed*/
 	wdev->wiphy->max_num_pmkids = AT_MAX_NUM_PMKIDS;
@@ -3625,6 +3689,10 @@ struct wireless_dev *WILC_WFI_WiphyRegister(struct net_device *net)
 #if LINUX_VERSION_CODE > KERNEL_VERSION(2,6,36)
 	wdev->wiphy->interface_modes = BIT(NL80211_IFTYPE_STATION) | BIT(NL80211_IFTYPE_AP) | BIT(NL80211_IFTYPE_MONITOR) | BIT(NL80211_IFTYPE_P2P_GO) |
 		BIT(NL80211_IFTYPE_P2P_CLIENT);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3,3,0)
+
+	wdev->wiphy->flags |= WIPHY_FLAG_HAS_REMAIN_ON_CHANNEL;
+#endif
 #else
 	wdev->wiphy->interface_modes = BIT(NL80211_IFTYPE_STATION) | BIT(NL80211_IFTYPE_AP) | BIT(NL80211_IFTYPE_MONITOR);
 #endif
