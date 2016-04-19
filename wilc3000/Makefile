@@ -1,3 +1,4 @@
+obj-$(CONFIG_WILC3000) += at_pwr_dev.o
 obj-$(CONFIG_WILC3000) += wilc3000.o
 
 ccflags-$(CONFIG_WILC3000_DEBUG) += -DDEBUG
@@ -19,14 +20,12 @@ wilc3000-y += host_interface.o
 wilc3000-y += linux_mon.o
 wilc3000-y += linux_wlan.o
 
-obj-$(CONFIG_WILC3000) += at_pwr_dev.o
-
 at_pwr_dev-y += at_pwr_dev_main.o
 at_pwr_dev-y += wilc_sdio.o
 at_pwr_dev-y += wilc_spi.o
 at_pwr_dev-$(CONFIG_WILC3000_SDIO) += linux_wlan_sdio.o
 at_pwr_dev-$(CONFIG_WILC3000_SPI) += linux_wlan_spi.o
 WILC3000_SRC_VERSION = 11.2
-PATCHLEVEL = 3
+PATCHLEVEL = 4
 
 ccflags-y += -D__DRIVER_VERSION__=\"$(WILC3000_SRC_VERSION).$(PATCHLEVEL)\"

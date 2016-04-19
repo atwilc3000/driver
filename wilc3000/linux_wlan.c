@@ -2474,7 +2474,7 @@ static int __init init_wilc_driver(void)
 	PRINT_D(INIT_DBG, "Device has been initialized successfully\n");
 	return 0;
 }
-module_init(init_wilc_driver);
+late_initcall(init_wilc_driver);
 
 static void __exit exit_wilc_driver(void)
 {
