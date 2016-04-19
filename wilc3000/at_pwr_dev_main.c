@@ -830,8 +830,10 @@ void release_bus(enum BUS_RELEASE release, int source)
 EXPORT_SYMBOL(release_bus);
 
 #if defined(PLAT_SAMA5D4)
-#define _linux_wlan_device_detection()		{}
-#define _linux_wlan_device_removal()		{}
+extern void atmci_rescan_card(unsigned id,unsigned insert);
+#define WILC_SDIO_CARD_ID	0
+#define _linux_wlan_device_detection()		atmci_rescan_card(WILC_SDIO_CARD_ID,1)
+#define _linux_wlan_device_removal()		atmci_rescan_card(WILC_SDIO_CARD_ID,0)
 #define _linux_wlan_device_power_on()		wifi_pm_power(1)
 #define _linux_wlan_device_power_off()		wifi_pm_power(0)
 #else

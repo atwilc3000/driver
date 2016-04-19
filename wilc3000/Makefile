@@ -26,3 +26,7 @@ at_pwr_dev-y += wilc_sdio.o
 at_pwr_dev-y += wilc_spi.o
 at_pwr_dev-$(CONFIG_WILC3000_SDIO) += linux_wlan_sdio.o
 at_pwr_dev-$(CONFIG_WILC3000_SPI) += linux_wlan_spi.o
+WILC3000_SRC_VERSION = 11.2
+PATCHLEVEL = 3
+
+ccflags-y += -D__DRIVER_VERSION__=\"$(WILC3000_SRC_VERSION).$(PATCHLEVEL)\"
