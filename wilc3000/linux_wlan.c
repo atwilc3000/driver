@@ -53,6 +53,7 @@
 #endif /* WILC_SDIO */
 #include "at_pwr_dev.h"
 #include "linux_wlan.h"
+#include <linux/pm_runtime.h>
 
 #ifdef DISABLE_PWRSAVE_AND_SCAN_DURING_IP
 static int dev_state_ev_handler(struct notifier_block *this, unsigned long event, void *ptr);
@@ -915,6 +916,10 @@ static int linux_wlan_start_firmware(struct perInterface_wlan *nic)
 
 	/* wait for mac ready */
 	PRINT_D(INIT_DBG, "Waiting for Firmware to get ready ...\n");
+
+#ifdef WILC_SDIO
+	pm_runtime_get_sync(local_sdio_func->card->host->parent);
+#endif
 
 	/* TicketId908
 	* Waiting for 500ms is much more enough for firmware to respond
