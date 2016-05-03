@@ -66,4 +66,5 @@
 #define BIT1                    ((uint32_t)(1 << 1))
 #define BIT0                    ((uint32_t)(1 << 0))
 #define ALL                     0xFFFF
+
 #endif

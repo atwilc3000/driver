@@ -44,6 +44,13 @@ enum debug_region{
 	COMP = 0xFFFFFFFF,
 };
 
+/* Antenna selection*/
+typedef enum { ANTENNA1  = 0,
+               ANTENNA2  = 1,
+               DIVERSITY = 2,
+               NUM_ANT_MODE
+}ANT_T;
+
 #define GENERIC_DBG	  		(1<<Generic_debug)
 #define HOSTAPD_DBG       	(1<<Hostapd_debug)
 #define HOSTINF_DBG	  		(1<<Hostinf_debug)

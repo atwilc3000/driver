@@ -30,6 +30,7 @@ extern volatile int g_bWaitForRecovery;
 extern bool bEnablePS;
 
 int linux_wlan_get_num_conn_ifcs(void);
+struct net_device* linux_wlan_get_if_netdev(uint8_t ifc);
 void WILC_WFI_monitor_rx(uint8_t *buff, uint32_t size);
 int mac_xmit(struct sk_buff *skb, struct net_device *dev);
 void WILC_WFI_mgmt_rx(uint8_t *buff, uint32_t size);

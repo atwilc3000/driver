@@ -243,7 +243,6 @@ typedef void (*tWILCpfRemainOnChanReady)(void *);
 typedef void (*tWILCpfFrmToLinux)(u8 *, unsigned int, unsigned int);
 typedef void (*tWILCpfFreeEAPBuffParams)(void *);
 
-/* unsigned int WFIDrvHandle; */
 struct WFIDrvHandle {
 	signed int s32Dummy;
 };
@@ -824,5 +823,7 @@ void resolve_disconnect_aberration(void *drvHandler);
 
 signed int host_int_set_tx_power(struct WFIDrvHandle *hWFIDrv, u8 tx_power);
 signed int  host_int_get_tx_power(struct WFIDrvHandle * hWFIDrv, u8 *tx_power);
+/*0 select antenna 1 , 2 select antenna mode , 2 allow the firmware to choose the best antenna*/
+signed int host_int_set_antenna(struct WFIDrvHandle * hWFIDrv, u8 antenna_mode);
 
 #endif

@@ -6,7 +6,7 @@ ccflags-$(CONFIG_WILC3000_SDIO) += -DWILC_SDIO
 ccflags-$(CONFIG_WILC3000_SPI) += -DWILC_SPI
 ccflags-$(CONFIG_WILC3000_HW_OOB_INTR) += -DWILC_SDIO_IRQ_GPIO
 
-ccflags-y += -DCONNECT_DIRECT -DWILC_PARSE_SCAN_IN_HOST
+ccflags-y += -DCONNECT_DIRECT -DWILC_PARSE_SCAN_IN_HOST -DWILC_OPTIMIZE_SLEEP_INT
 ccflags-y += -DAGING_ALG -DDISABLE_PWRSAVE_AND_SCAN_DURING_IP -DHW_HAS_EFUSED_MAC_ADDR
 ccflags-y += -Wno-unused-function
 ccflags-y += -DWILC_BT_COEXISTENCE -DDOWNLOAD_BT_FW
@@ -25,7 +25,7 @@ at_pwr_dev-y += wilc_sdio.o
 at_pwr_dev-y += wilc_spi.o
 at_pwr_dev-$(CONFIG_WILC3000_SDIO) += linux_wlan_sdio.o
 at_pwr_dev-$(CONFIG_WILC3000_SPI) += linux_wlan_spi.o
-WILC3000_SRC_VERSION = 11.2
-PATCHLEVEL = 4
+WILC3000_SRC_VERSION = 11.3
+PATCHLEVEL = 0
 
 ccflags-y += -D__DRIVER_VERSION__=\"$(WILC3000_SRC_VERSION).$(PATCHLEVEL)\"

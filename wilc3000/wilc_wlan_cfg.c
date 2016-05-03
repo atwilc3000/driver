@@ -84,6 +84,7 @@ static struct wilc_cfg_byte_t g_cfg_byte[] = {
 	{WID_TX_ABORT_CONFIG, 0},
 	{WID_11N_IMMEDIATE_BA_ENABLED, 0},
 	{WID_11N_TXOP_PROT_DISABLE, 0},
+	{WID_TX_POWER, 0},
 	{WID_NIL, 0}
 };
 
@@ -163,8 +164,9 @@ static int wilc_wlan_cfg_set_byte(uint8_t *frame, uint32_t offset,
 	buf[0] = (uint8_t)id;
 	buf[1] = (uint8_t)(id >> 8);
 	buf[2] = 1;
-	buf[3] = val8;
-	return 4;
+	buf[3] = 0;
+	buf[4] = val8;
+	return 5;
 }
 
 static int wilc_wlan_cfg_set_hword(uint8_t *frame, uint32_t offset,
@@ -180,10 +182,11 @@ static int wilc_wlan_cfg_set_hword(uint8_t *frame, uint32_t offset,
 	buf[0] = (uint8_t)id;
 	buf[1] = (uint8_t)(id >> 8);
 	buf[2] = 2;
-	buf[3] = (uint8_t)val16;
-	buf[4] = (uint8_t)(val16 >> 8);
+	buf[3] = 0;
+	buf[4] = (uint8_t)val16;
+	buf[5] = (uint8_t)(val16>>8);
 
-	return 5;
+	return 6;
 }
 
 static int wilc_wlan_cfg_set_word(uint8_t *frame, uint32_t offset,
@@ -199,12 +202,13 @@ static int wilc_wlan_cfg_set_word(uint8_t *frame, uint32_t offset,
 	buf[0] = (uint8_t)id;
 	buf[1] = (uint8_t)(id >> 8);
 	buf[2] = 4;
-	buf[3] = (uint8_t)val32;
-	buf[4] = (uint8_t)(val32 >> 8);
-	buf[5] = (uint8_t)(val32 >> 16);
-	buf[6] = (uint8_t)(val32 >> 24);
+	buf[3] = 0;
+	buf[4] = (uint8_t)val32;
+	buf[5] = (uint8_t)(val32>>8);
+	buf[6] = (uint8_t)(val32>>16);
+	buf[7] = (uint8_t)(val32>>24);
 
-	return 7;
+	return 8;
 }
 
 static int wilc_wlan_cfg_set_str(uint8_t *frame, uint32_t offset,
@@ -212,7 +216,7 @@ static int wilc_wlan_cfg_set_str(uint8_t *frame, uint32_t offset,
 {
 	uint8_t *buf;
 
-	if ((offset + size + 3) >= MAX_CFG_FRAME_SIZE)
+	if ((offset+size+4) >= MAX_CFG_FRAME_SIZE)
 		return 0;
 
 	buf = &frame[offset];
@@ -220,11 +224,14 @@ static int wilc_wlan_cfg_set_str(uint8_t *frame, uint32_t offset,
 	buf[0] = (uint8_t)id;
 	buf[1] = (uint8_t)(id >> 8);
 	buf[2] = (uint8_t)size;
+	buf[3] = (uint8_t)(size>>8);
 
-	if ((str != NULL) && (size != 0))
-		memcpy(&buf[3], str, size);
+	if((str != NULL) && (size != 0))
+	{
+		memcpy(&buf[4], str, size);
+	}
 
-	return (size + 3);
+	return (size+4);
 }
 
 static int wilc_wlan_cfg_set_bin(uint8_t *frame, uint32_t offset,
@@ -273,12 +280,12 @@ static void wilc_wlan_parse_response_frame(uint8_t *info, int size)
 					break;
 
 				if (g_cfg_byte[i].id == wid) {
-					g_cfg_byte[i].val = info[3];
+					g_cfg_byte[i].val = info[4];
 					break;
 				}
 				i++;
 			} while (1);
-			len = 2;
+			len = 3;
 			break;
 		case WID_SHORT:
 			do {
@@ -286,16 +293,16 @@ static void wilc_wlan_parse_response_frame(uint8_t *info, int size)
 					break;
 
 				if (g_cfg_hword[i].id == wid) {
-				#ifdef BIG_ENDIAN
-					g_cfg_hword[i].val = (info[3] << 8) | (info[4]);
-				#else
-					g_cfg_hword[i].val = info[3] | (info[4] << 8);
-				#endif
+#ifdef BIG_ENDIAN
+					g_cfg_hword[i].val = (info[4]<<8)|(info[5]);
+#else
+					g_cfg_hword[i].val = info[4]|(info[5]<<8);
+#endif
 					break;
 				}
 				i++;
 			} while (1);
-			len = 3;
+			len = 4;
 			break;
 		case WID_INT:
 			do {
@@ -303,16 +310,16 @@ static void wilc_wlan_parse_response_frame(uint8_t *info, int size)
 					break;
 
 				if (g_cfg_word[i].id == wid) {
-				#ifdef BIG_ENDIAN
-					g_cfg_word[i].val = (info[3] << 24) | (info[4] << 16) | (info[5] << 8) | (info[6]);
-				#else
-					g_cfg_word[i].val = info[3] | (info[4] << 8) | (info[5] << 16) | (info[6] << 24);
-				#endif
+#ifdef BIG_ENDIAN
+					g_cfg_word[i].val = (info[4]<<24)|(info[5]<<16)|(info[6]<<8)|(info[7]);
+#else
+					g_cfg_word[i].val = info[4]|(info[5]<<8)|(info[6]<<16)|(info[7]<<24);
+#endif
 					break;
 				}
 				i++;
 			} while (1);
-			len = 5;
+			len = 6;
 			break;
 		case WID_STR:
 			do {
@@ -330,12 +337,12 @@ static void wilc_wlan_parse_response_frame(uint8_t *info, int size)
 						i += toggle;
 						toggle ^= 1;
 					}
-					memcpy(g_cfg_str[i].str, &info[2], (info[2] + 1));
+					memcpy(g_cfg_str[i].str, &info[2], (info[2]+2));
 					break;
 				}
 				i++;
 			} while (1);
-			len = 1 + info[2];
+			len = 2+info[2];
 			break;
 		default:
 			break;
@@ -458,7 +465,7 @@ static int wilc_wlan_cfg_get_wid_value(uint16_t wid, uint8_t *buffer,
 				break;
 
 			if (g_cfg_str[i].id == wid) {
-				uint32_t size =  g_cfg_str[i].str[0];
+				uint32_t size =  (g_cfg_str[i].str[0])|(g_cfg_str[i].str[1]<<8);
 
 				if (buffer_size >= size) {
 					if (g_cfg_str[i].id == WID_SITE_SURVEY_RESULTS)	{
@@ -469,7 +476,7 @@ static int wilc_wlan_cfg_get_wid_value(uint16_t wid, uint8_t *buffer,
 						i += toggle;
 						toggle ^= 1;
 					}
-					memcpy(buffer,  &g_cfg_str[i].str[1], size);
+					memcpy(buffer,  &g_cfg_str[i].str[2], size);
 					ret = size;
 				}
 				break;
