@@ -9,7 +9,7 @@ ccflags-$(CONFIG_WILC3000_HW_OOB_INTR) += -DWILC_SDIO_IRQ_GPIO
 ccflags-y += -DCONNECT_DIRECT -DWILC_PARSE_SCAN_IN_HOST -DWILC_OPTIMIZE_SLEEP_INT
 ccflags-y += -DAGING_ALG -DDISABLE_PWRSAVE_AND_SCAN_DURING_IP -DHW_HAS_EFUSED_MAC_ADDR
 ccflags-y += -Wno-unused-function
-ccflags-y += -DWILC_BT_COEXISTENCE -DDOWNLOAD_BT_FW
+ccflags-y += -DWILC_BT_COEXISTENCE
 
 wilc3000-y += atl_msg_queue.o
 wilc3000-y += wilc_wfi_cfg_operations.o
