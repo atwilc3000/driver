@@ -2187,9 +2187,9 @@ void WILC_WFI_p2p_rx(struct net_device *dev, uint8_t *buff, uint32_t size)
 			}
 		}
 	#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 18 ,0))
-		cfg80211_rx_mgmt(priv->wdev,s32Freq, 0, buff,size-7,0);
+		cfg80211_rx_mgmt(priv->wdev,s32Freq, 0, buff,size,0);
 	#elif (LINUX_VERSION_CODE >= KERNEL_VERSION(3,12,0))
-		cfg80211_rx_mgmt(priv->wdev,s32Freq, 0, buff,size-7,0,GFP_ATOMIC);
+		cfg80211_rx_mgmt(priv->wdev,s32Freq, 0, buff,size,0,GFP_ATOMIC);
 	#elif (LINUX_VERSION_CODE >= KERNEL_VERSION(3,6,0))
 		cfg80211_rx_mgmt(priv->wdev,s32Freq, 0, buff,size,GFP_ATOMIC);
 	#elif (LINUX_VERSION_CODE >= KERNEL_VERSION(3,4,0))
