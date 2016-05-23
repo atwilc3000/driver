@@ -20,8 +20,8 @@
 #define LINUX_WLAN_COMMON_H
 
 
-#define WIFI_FIRMWARE	"wifi_firmware.bin"
-#define BT_FIRMWARE				"bt_firmware.bin"
+#define WIFI_FIRMWARE	"atmel/wilc3000_wifi_firmware.bin"
+#define BT_FIRMWARE	"atmel/wilc3000_bt_firmware.bin"
 
 enum debug_region{
 	Generic_debug = 0,
