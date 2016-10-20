@@ -1,5 +1,25 @@
+/*
+ * Atmel WILC1000 802.11 b/g/n driver
+ *
+ * Copyright (c) 2015 Atmel Corportation
+ *
+ * Permission to use, copy, modify, and/or distribute this software for any
+ * purpose with or without fee is hereby granted, provided that the above
+ * copyright notice and this permission notice appear in all copies.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+ * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+ * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+ * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ */
+
 #ifndef LINUX_WLAN_COMMON_H
 #define LINUX_WLAN_COMMON_H
+
+#define WIFI_FIRMWARE	"wilc1000_wifi_firmware.bin"
 
 enum debug_region{
 	Generic_debug = 0,
@@ -12,7 +32,6 @@ enum debug_region{
 	RX_debug,
 	Lock_debug,
 	Tcp_enhance,
-	/*Added by amr - BugID_4720*/
 	Spin_debug,
 	
 	Init_debug,
@@ -40,56 +59,12 @@ typedef enum { ANTENNA1  = 0,
 #define LOCK_DBG	  		(1<<Lock_debug)
 #define TCP_ENH	  			(1<<Tcp_enhance)
 
-
-/*Added by Amr - BugID_4720*/
 #define SPIN_DEBUG 			(1<<Spin_debug)
 
 #define INIT_DBG	  	  		(1<<Init_debug)
 #define BUS_DBG		  		(1<<Bus_debug)
 #define MEM_DBG		  		(1<<Mem_debug)
 #define FIRM_DBG	  		(1<<Firmware_debug)
-
-#if defined (WILC_DEBUGFS)
-extern int wilc_debugfs_init(void);
-extern void wilc_debugfs_remove(void);
-
-extern atomic_t REGION;
-extern atomic_t DEBUG_LEVEL;
-
-#define DEBUG		(1 << 0)
-#define INFO		(1 << 1)
-#define WRN			(1 << 2)
-#define ERR			(1 << 3)
-
-#define PRINT_D(region,...)	do{ \
-								if((atomic_read(&DEBUG_LEVEL) & DEBUG) && ((atomic_read(&REGION))&(region))) { \
-									printk("DBG [%s: %d]",__FUNCTION__,__LINE__);\
-									printk(__VA_ARGS__); \
-								} \
-							} while(0)
-							
-#define PRINT_INFO(region,...) do{ \
-								if((atomic_read(&DEBUG_LEVEL) & INFO) && ((atomic_read(&REGION))&(region))) { \
-									printk("INFO [%s]",__FUNCTION__);\
-									printk(__VA_ARGS__); \
-								} \
-							} while(0)
-
-#define PRINT_WRN(region,...) do{ \
-								if((atomic_read(&DEBUG_LEVEL) & WRN) && ((atomic_read(&REGION))&(region))) { \
-									printk("WRN [%s: %d]",__FUNCTION__,__LINE__);\
-									printk(__VA_ARGS__); \
-								} \
-							} while(0)
-
-#define PRINT_ER(...)	do{ \
-							if((atomic_read(&DEBUG_LEVEL) & ERR)) {	\
-								printk("ERR [%s: %d]",__FUNCTION__,__LINE__);\
-								printk(__VA_ARGS__); \
-							} \
-						} while(0)
-
-#else
 
 #define REGION	 INIT_DBG|GENERIC_DBG|CFG80211_DBG | FIRM_DBG | HOSTAPD_DBG
 
@@ -107,61 +82,25 @@ extern atomic_t DEBUG_LEVEL;
 
 #define PRINT_ER(...)	do{ printk("ERR [%s: %d]",__FUNCTION__,__LINE__);\
 							printk(__VA_ARGS__);}while(0)
-#endif
-
-#define FN_IN	//PRINT_D(">>> \n")
-#define FN_OUT	//PRINT_D("<<<\n")
-
 #ifdef MEMORY_STATIC
-#define LINUX_RX_SIZE	(96*1024)
+#define LINUX_RX_SIZE	(96 * 1024)
 #endif
-#define LINUX_TX_SIZE	(64*1024)
+#define LINUX_TX_SIZE	(64 * 1024)
 
 
-#define WILC_MULTICAST_TABLE_SIZE	8
-
-#if defined (NM73131_0_BOARD)
-
-#define MODALIAS "wilc_spi"
-#define GPIO_NUM	IRQ_WILC1000_GPIO
-
-#elif defined (BEAGLE_BOARD)
-	#define SPI_CHANNEL	4
-	
-	#if SPI_CHANNEL == 4
-		#define MODALIAS 	"wilc_spi4"
-		#define GPIO_NUM	162
-	#else
-		#define MODALIAS 	"wilc_spi3"
-		#define GPIO_NUM	133
-	#endif
-#elif defined(PANDA_BOARD)
-	#define MODALIAS 	"WILC_SPI"
-	#define GPIO_NUM	139
-#elif defined(PLAT_WMS8304)		// rachel
+#if defined(SAMA5D4_BOARD)
 	#define MODALIAS 	"wilc_spi"
-	#define GPIO_NUM	139
-#elif defined (PLAT_RKXXXX)
- #define MODALIAS	"WILC_IRQ"
- #define GPIO_NUM	RK30_PIN3_PD2 //RK30_PIN3_PA1
-	//RK30_PIN3_PD2
-	//RK2928_PIN1_PA7
 
-#elif defined(CUSTOMER_PLATFORM)
-/*
- TODO : specify MODALIAS name and GPIO number. This is certainly necessary for SPI interface.
-
-ex)
-#define MODALIAS  "WILC_SPI"
-#define GPIO_NUM  139
-*/
+#if (defined WILC_SPI) || (defined WILC_SDIO_IRQ_GPIO)
+	#define GPIO_NUM	0x96
+#else
+	#define GPIO_NUM     0x5B
+#endif
 
 #else
-	/* base on SAMA5D3_Xplained Board */
 	#define MODALIAS 	"WILC_SPI"
-	#define GPIO_NUM	0x44
-#endif
-	
+	#define GPIO_NUM	139
 
-void linux_wlan_enable_irq(void);
 #endif
+
+#endif /* LINUX_WLAN_COMMON_H */

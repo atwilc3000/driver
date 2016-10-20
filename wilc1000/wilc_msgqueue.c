@@ -1,233 +1,182 @@
+/*
+ * Atmel WILC1000 802.11 b/g/n driver
+ *
+ * Copyright (c) 2015 Atmel Corportation
+ *
+ * Permission to use, copy, modify, and/or distribute this software for any
+ * purpose with or without fee is hereby granted, provided that the above
+ * copyright notice and this permission notice appear in all copies.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+ * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+ * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+ * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ */
 
-#include "wilc_oswrapper.h"
+#include "wilc_errorsupport.h"
 #include <linux/spinlock.h>
-#ifdef CONFIG_WILC_MSG_QUEUE_FEATURE
+#include <linux/kthread.h>
+#include <linux/semaphore.h>
+#include <linux/module.h>
+#include <linux/slab.h>
+#include <linux/kernel.h>
+#include <linux/delay.h>
+#include <linux/types.h>
+#include <linux/stat.h>
+#include <linux/time.h>
+#include <linux/version.h>
+#include "linux/string.h"
+#include "wilc_msgqueue.h"
 
-
-/*!
-*  @author		syounan
-*  @date		1 Sep 2010
-*  @note		copied from FLO glue implementatuion
-*  @version		1.0
-*/
-WILC_ErrNo WILC_MsgQueueCreate(WILC_MsgQueueHandle* pHandle,
-			tstrWILC_MsgQueueAttrs* pstrAttrs)
+signed int WILC_MsgQueueCreate(struct MsgQueueHandle *pHandle)
 {
-	tstrWILC_SemaphoreAttrs strSemAttrs;
-	WILC_SemaphoreFillDefault(&strSemAttrs);
-	strSemAttrs.u32InitCount = 0;
-
 	spin_lock_init(&pHandle->strCriticalSection);
-	if( (WILC_SemaphoreCreate(&pHandle->hSem, &strSemAttrs) == WILC_SUCCESS))
-	{
-	
-		pHandle->pstrMessageList = NULL;
-		pHandle->u32ReceiversCount = 0;
-		pHandle->bExiting = WILC_FALSE;
+	sema_init(&pHandle->hSem, 0);
 
-		return WILC_SUCCESS;
-	}
-	else
-	{
-		return WILC_FAIL;
-	}
+	pHandle->pstrMessageList = NULL;
+	pHandle->u32ReceiversCount = 0;
+	pHandle->bExiting = false;
+
+	return WILC_SUCCESS;
 }
 
-/*!
-*  @author		syounan
-*  @date		1 Sep 2010
-*  @note		copied from FLO glue implementatuion
-*  @version		1.0
-*/
-WILC_ErrNo WILC_MsgQueueDestroy(WILC_MsgQueueHandle* pHandle,
-			tstrWILC_MsgQueueAttrs* pstrAttrs)
+signed int WILC_MsgQueueDestroy(struct MsgQueueHandle *pHandle)
 {
+	pHandle->bExiting = true;
 
-	pHandle->bExiting = WILC_TRUE;
-
-	// Release any waiting receiver thread.
-	while(pHandle->u32ReceiversCount > 0)
-	{
-		WILC_SemaphoreRelease(&(pHandle->hSem), WILC_NULL);	
+	/* Release any waiting receiver thread.*/
+	while (pHandle->u32ReceiversCount > 0) {
+		up(&pHandle->hSem);
 		pHandle->u32ReceiversCount--;
 	}
 
-	WILC_SemaphoreDestroy(&pHandle->hSem, WILC_NULL);
-	
-	while(pHandle->pstrMessageList != NULL)
-	{
-		Message * pstrMessge = pHandle->pstrMessageList->pstrNext;
-		WILC_FREE(pHandle->pstrMessageList);
-		pHandle->pstrMessageList = pstrMessge;	
+	while (NULL != pHandle->pstrMessageList) {
+		struct Message *pstrMessge = pHandle->pstrMessageList->pstrNext;
+
+		kfree(pHandle->pstrMessageList);
+		pHandle->pstrMessageList = pstrMessge;
 	}
 
 	return WILC_SUCCESS;
 }
 
-/*!
-*  @author		syounan
-*  @date		1 Sep 2010
-*  @note		copied from FLO glue implementatuion
-*  @version		1.0
-*/
-WILC_ErrNo WILC_MsgQueueSend(WILC_MsgQueueHandle* pHandle,
-			const void * pvSendBuffer, WILC_Uint32 u32SendBufferSize,
-			tstrWILC_MsgQueueAttrs* pstrAttrs)
+signed int WILC_MsgQueueSend(struct MsgQueueHandle *pHandle,
+			    const void *pvSendBuffer,
+			    u32 u32SendBufferSize)
 {
-	WILC_ErrNo s32RetStatus = WILC_SUCCESS;
+	signed int s32RetStatus = WILC_SUCCESS;
 	unsigned long flags;
-	Message * pstrMessage = NULL;
-	
-	if( (pHandle == NULL) || (u32SendBufferSize == 0) || (pvSendBuffer == NULL) )
-	{
+	struct Message *pstrMessage = NULL;
+
+	if ((NULL == pHandle)
+			|| (u32SendBufferSize == 0)
+			|| (pvSendBuffer == NULL))
 		WILC_ERRORREPORT(s32RetStatus, WILC_INVALID_ARGUMENT);
-	}
 
-	if(pHandle->bExiting == WILC_TRUE)
-	{
+	if (pHandle->bExiting == true)
 		WILC_ERRORREPORT(s32RetStatus, WILC_FAIL);
-	}
 
-	spin_lock_irqsave(&pHandle->strCriticalSection,flags);
-	
+	spin_lock_irqsave(&pHandle->strCriticalSection, flags);
+
 	/* construct a new message */
-	pstrMessage = WILC_NEW(Message, 1);
+	pstrMessage = kmalloc(sizeof(struct Message), GFP_ATOMIC);
 	WILC_NULLCHECK(s32RetStatus, pstrMessage);
 	pstrMessage->u32Length = u32SendBufferSize;
 	pstrMessage->pstrNext = NULL;
-	pstrMessage->pvBuffer = WILC_MALLOC(u32SendBufferSize);
+	pstrMessage->pvBuffer = kmalloc(u32SendBufferSize, GFP_ATOMIC);
 	WILC_NULLCHECK(s32RetStatus, pstrMessage->pvBuffer);
-	WILC_memcpy(pstrMessage->pvBuffer, pvSendBuffer, u32SendBufferSize);
-	
+	memcpy(pstrMessage->pvBuffer, pvSendBuffer, u32SendBufferSize);
+
 
 	/* add it to the message queue */
-	if(pHandle->pstrMessageList == NULL)
-	{
+	if (NULL == pHandle->pstrMessageList) {
 		pHandle->pstrMessageList  = pstrMessage;
-	}
-	else
-	{
-		Message * pstrTailMsg = pHandle->pstrMessageList;
-		while(pstrTailMsg->pstrNext != NULL)
-		{
+	} else {
+		struct Message *pstrTailMsg = pHandle->pstrMessageList;
+
+		while (NULL != pstrTailMsg->pstrNext)
 			pstrTailMsg = pstrTailMsg->pstrNext;
-		}
 		pstrTailMsg->pstrNext = pstrMessage;
-	}	
-	
-	spin_unlock_irqrestore(&pHandle->strCriticalSection,flags);
+	}
 
-	WILC_SemaphoreRelease(&pHandle->hSem, WILC_NULL);
-	
-	WILC_CATCH(s32RetStatus)
-	{
+	spin_unlock_irqrestore(&pHandle->strCriticalSection, flags);
+
+	up(&pHandle->hSem);
+
+	WILC_CATCH(s32RetStatus){
 		/* error occured, free any allocations */
-		if(pstrMessage != NULL)
-		{
-			if(pstrMessage->pvBuffer != NULL)
-			{
-				WILC_FREE(pstrMessage->pvBuffer);
-			}
-			WILC_FREE(pstrMessage);
+		if (NULL != pstrMessage) {
+			kfree(pstrMessage->pvBuffer);
+			kfree(pstrMessage);
 		}
 	}
 
-	return s32RetStatus; 
-}
-
-
-
-/*!
-*  @author		syounan
-*  @date		1 Sep 2010
-*  @note		copied from FLO glue implementatuion
-*  @version		1.0
-*/
-WILC_ErrNo WILC_MsgQueueRecv(WILC_MsgQueueHandle* pHandle, 
-			void * pvRecvBuffer, WILC_Uint32 u32RecvBufferSize, 
-			WILC_Uint32* pu32ReceivedLength,
-			tstrWILC_MsgQueueAttrs* pstrAttrs)
-{
-
-	Message * pstrMessage;
-	WILC_ErrNo s32RetStatus = WILC_SUCCESS;
-	tstrWILC_SemaphoreAttrs strSemAttrs;
-	unsigned long flags;
-	if( (pHandle == NULL) || (u32RecvBufferSize == 0) 
-		|| (pvRecvBuffer == NULL) || (pu32ReceivedLength == NULL) )
-	{
-		WILC_ERRORREPORT(s32RetStatus, WILC_INVALID_ARGUMENT);
-	}
-
-	if(pHandle->bExiting == WILC_TRUE)
-	{
-		WILC_ERRORREPORT(s32RetStatus, WILC_FAIL);
-	}
-	
-	spin_lock_irqsave(&pHandle->strCriticalSection,flags);
-	pHandle->u32ReceiversCount++;
-	spin_unlock_irqrestore(&pHandle->strCriticalSection,flags);
-
-	WILC_SemaphoreFillDefault(&strSemAttrs);
-	#ifdef CONFIG_WILC_MSG_QUEUE_TIMEOUT
-	if(pstrAttrs != WILC_NULL)
-	{
-		strSemAttrs.u32TimeOut = pstrAttrs->u32Timeout;
-	}
-	#endif
-	s32RetStatus = WILC_SemaphoreAcquire(&(pHandle->hSem), &strSemAttrs);
-	if(s32RetStatus == WILC_TIMEOUT)
-	{
-		/* timed out, just exit without consumeing the message */
-		spin_lock_irqsave(&pHandle->strCriticalSection,flags);
-		pHandle->u32ReceiversCount--;
-		spin_unlock_irqrestore(&pHandle->strCriticalSection,flags);
-	}
-	else
-	{
-		/* other non-timeout scenarios */
-		WILC_ERRORCHECK(s32RetStatus);
-
-		if(pHandle->bExiting)
-		{
-			WILC_ERRORREPORT(s32RetStatus, WILC_FAIL);
-		}
-
-		spin_lock_irqsave(&pHandle->strCriticalSection,flags);
-		
-		pstrMessage = pHandle->pstrMessageList;
-		if(pstrMessage == NULL)
-		{
-		spin_unlock_irqrestore(&pHandle->strCriticalSection,flags);
-			WILC_ERRORREPORT(s32RetStatus, WILC_FAIL);
-		}
-		/* check buffer size */
-		if(u32RecvBufferSize < pstrMessage->u32Length)
-		{
-			spin_unlock_irqrestore(&pHandle->strCriticalSection,flags);
-			WILC_SemaphoreRelease(&pHandle->hSem, WILC_NULL);
-			WILC_ERRORREPORT(s32RetStatus, WILC_BUFFER_OVERFLOW);
-		}
-
-		/* consume the message */
-		pHandle->u32ReceiversCount--;
-		WILC_memcpy(pvRecvBuffer, pstrMessage->pvBuffer, pstrMessage->u32Length);
-		*pu32ReceivedLength = pstrMessage->u32Length;
-
-		pHandle->pstrMessageList = pstrMessage->pstrNext;
-		
-		WILC_FREE(pstrMessage->pvBuffer);
-		WILC_FREE(pstrMessage);	
-		
-		spin_unlock_irqrestore(&pHandle->strCriticalSection,flags);
-
-	}
-
-	WILC_CATCH(s32RetStatus)
-	{
-	}
-	
 	return s32RetStatus;
 }
 
-#endif
+	
+signed int WILC_MsgQueueRecv(struct MsgQueueHandle *pHandle,
+			   void *pvRecvBuffer, unsigned int u32RecvBufferSize,
+			   unsigned int *pu32ReceivedLength)
+{
+
+	struct Message *pstrMessage;
+	signed int s32RetStatus = WILC_SUCCESS;
+	unsigned long flags;
+
+	if ((NULL == pHandle) || (u32RecvBufferSize == 0)
+	    || (NULL == pvRecvBuffer) || (NULL == pu32ReceivedLength))
+		WILC_ERRORREPORT(s32RetStatus, WILC_INVALID_ARGUMENT);
+
+	if (pHandle->bExiting == true)
+		WILC_ERRORREPORT(s32RetStatus, WILC_FAIL);
+
+	spin_lock_irqsave(&pHandle->strCriticalSection, flags);
+	pHandle->u32ReceiversCount++;
+
+		/* timed out, just exit without consumeing the message */
+	spin_unlock_irqrestore(&pHandle->strCriticalSection, flags);
+	down(&(pHandle->hSem));
+
+	WILC_ERRORCHECK(s32RetStatus);
+
+	if (pHandle->bExiting)
+		WILC_ERRORREPORT(s32RetStatus, WILC_FAIL);
+
+	spin_lock_irqsave(&pHandle->strCriticalSection, flags);
+
+	pstrMessage = pHandle->pstrMessageList;
+	if (NULL == pstrMessage) {
+		spin_unlock_irqrestore(&pHandle->strCriticalSection, flags);
+		WILC_ERRORREPORT(s32RetStatus, WILC_FAIL);
+	}
+
+	/* check buffer size */
+	if (u32RecvBufferSize < pstrMessage->u32Length) {
+		spin_unlock_irqrestore(&pHandle->strCriticalSection, flags);
+		up(&pHandle->hSem);
+		WILC_ERRORREPORT(s32RetStatus, WILC_BUFFER_OVERFLOW);
+	}
+
+	/* consume the message */
+	pHandle->u32ReceiversCount--;
+	memcpy(pvRecvBuffer, pstrMessage->pvBuffer, pstrMessage->u32Length);
+	*pu32ReceivedLength = pstrMessage->u32Length;
+
+	pHandle->pstrMessageList = pstrMessage->pstrNext;
+
+	kfree(pstrMessage->pvBuffer);
+	kfree(pstrMessage);
+
+
+	spin_unlock_irqrestore(&pHandle->strCriticalSection, flags);
+
+	WILC_CATCH(s32RetStatus)
+	{
+	}
+	return s32RetStatus;
+}
+

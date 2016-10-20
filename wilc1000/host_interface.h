@@ -68,13 +68,14 @@
 #define PMKSA_KEY_LEN		22
 #define ETH_ALEN			6
 #define PMKID_LEN			16
-#define WILC_MAX_NUM_PMKIDS  16
+#define WILC_MAX_NUM_PMKIDS	16
 #define WILC_SUPP_MCS_SET_SIZE	16
 /* Not including the rates field cause it has variable length*/
 #define WILC_ADD_STA_LENGTH	40
 #define SCAN_EVENT_DONE_ABORTED
+#define NUM_CONCURRENT_IFC 2
 
-
+#define WILC_MULTICAST_TABLE_SIZE	8
 
 extern bool gbScanWhileConnected;
 extern unsigned int gu8FlushedJoinReqDrvHandler;
@@ -82,9 +83,6 @@ extern u8 *gu8FlushedInfoElemAsoc;
 extern u8 *gu8FlushedJoinReq;
 extern u8 gau8MulticastMacAddrList[WILC_MULTICAST_TABLE_SIZE][ETH_ALEN];
 extern u8 u8ConnectedSSID[6];
-#ifdef DISABLE_PWRSAVE_AND_SCAN_DURING_IP
-extern bool g_obtainingIP;
-#endif
 
 struct tstrStatistics {
 	u8 u8LinkSpeed;
@@ -146,7 +144,7 @@ struct tstrCfgParamVal {
 	u8 txop_prot_disabled;
 	u16 beacon_interval;
 	u16 dtim_period;
-	SITE_SURVEY_T site_survey_enabled;
+	enum SITE_SURVEY_E site_survey_enabled;
 	u16 site_survey_scan_time;
 	u8 scan_source;
 	u16 active_scan_time;
@@ -220,7 +218,7 @@ typedef void (*tWILCpfRemainOnChanExpired)(void *, unsigned int);
 typedef void (*tWILCpfRemainOnChanReady)(void *);
 #endif
 
-typedef void (*tWILCpfFrmToLinux)(u8 *, unsigned int, unsigned int);
+typedef void (*tWILCpfFrmToLinux)(u8 *, unsigned int, unsigned int, u8);
 typedef void (*tWILCpfFreeEAPBuffParams)(void *);
 
 struct WFIDrvHandle {
@@ -371,6 +369,9 @@ struct WILC_WFIDrv {
 
 	bool IFC_UP;
 	int driver_handler_id;
+	#ifdef DISABLE_PWRSAVE_AND_SCAN_DURING_IP
+	bool pwrsave_current_state;
+	#endif
 };
 
 /*
@@ -797,8 +798,10 @@ signed int host_int_get_statistics(struct WFIDrvHandle *hWFIDrv,
 void resolve_disconnect_aberration(void *drvHandler);
 
 signed int host_int_set_tx_power(struct WFIDrvHandle *hWFIDrv, u8 tx_power);
+
 signed int  host_int_get_tx_power(struct WFIDrvHandle * hWFIDrv, u8 *tx_power);
 /*0 select antenna 1 , 2 select antenna mode , 2 allow the firmware to choose the best antenna*/
 signed int host_int_set_antenna(struct WFIDrvHandle *hWFIDrv, u8 antenna_mode);
+signed int host_int_set_wowlan_trigger(struct WFIDrvHandle *hWFIDrv, u8 wowlan_trigger);
 
 #endif

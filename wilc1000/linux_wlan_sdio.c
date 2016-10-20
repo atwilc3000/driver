@@ -1,3 +1,21 @@
+/*
+ * Atmel WILC1000 802.11 b/g/n driver
+ *
+ * Copyright (c) 2015 Atmel Corportation
+ *
+ * Permission to use, copy, modify, and/or distribute this software for any
+ * purpose with or without fee is hereby granted, provided that the above
+ * copyright notice and this permission notice appear in all copies.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+ * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+ * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+ * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ */
+
 #include "wilc_wfi_netdevice.h"
 
 #include <linux/mmc/sdio_func.h>
@@ -6,41 +24,31 @@
 #include <linux/mmc/sdio.h>
 #include <linux/mmc/host.h>
 
-
-
-#if defined (NM73131_0_BOARD)
+#include "linux_wlan_sdio.h"
 #define SDIO_MODALIAS "wilc_sdio"
-#else
-#define SDIO_MODALIAS "wilc1000_sdio"
-#endif
 
-#if defined (NM73131_0_BOARD)
- #define MAX_SPEED 50000000
-#elif defined(CUSTOMER_PLATFORM)
-/* TODO : User have to stable bus clock as user's environment. */
- #ifdef MAX_BUS_SPEED
- #define MAX_SPEED MAX_BUS_SPEED
- #else
- #define MAX_SPEED 50000000
- #endif
-#else
- #define MAX_SPEED 30*1000000 //Max 50M
-#endif
-
-
-struct sdio_func* local_sdio_func = NULL;
-extern linux_wlan_t* g_linux_wlan;
+struct wilc_wlan_os_context  g_linux_sdio_os_context;
+struct sdio_func *local_sdio_func = NULL;
 extern int wilc_netdev_init(void);
 extern int sdio_clear_int(void);
 extern void wilc_handle_isr(void);
+extern int sdio_init(struct wilc_wlan_inp *inp);
+extern int sdio_reset(void *pv);
+void chip_wakeup(void);
+void chip_allow_sleep(void);
+void chip_sleep_manually(u32 u32SleepTime);
+void host_wakeup_notify(void);
+void host_sleep_notify(void);
 
-static unsigned int sdio_default_speed=0;
+extern uint8_t u8ResumeOnEvent;
 
 #define SDIO_VENDOR_ID_WILC 0x0296
 #define SDIO_DEVICE_ID_WILC 0x5347
 
 static const struct sdio_device_id wilc_sdio_ids[] = {
-	{ SDIO_DEVICE(SDIO_VENDOR_ID_WILC,SDIO_DEVICE_ID_WILC) },
+	{ SDIO_DEVICE(SDIO_VENDOR_ID_WILC, SDIO_DEVICE_ID_WILC) },
+
+	{ }
 };
 
 
@@ -50,19 +58,19 @@ static void wilc_sdio_interrupt(struct sdio_func *func)
 	sdio_release_host(func);
 	wilc_handle_isr();
 	sdio_claim_host(func);
-#endif
+#endif /* WILC_SDIO_IRQ_GPIO */
 }
 
-
-int linux_sdio_cmd52(sdio_cmd52_t *cmd){
-	struct sdio_func *func = g_linux_wlan->wilc_sdio_func;
+int linux_sdio_cmd52(struct sdio_cmd52_t *cmd)
+{
+	struct sdio_func *func = local_sdio_func;
 	int ret;
 	u8 data;
 
 	sdio_claim_host(func);
 
 	func->num = cmd->function;
-	if (cmd->read_write) {	/* write */
+	if (cmd->read_write) {
 		if (cmd->raw) {
 			sdio_writeb(func, cmd->data, cmd->address, &ret);
 			data = sdio_readb(func, cmd->address, &ret);
@@ -70,7 +78,7 @@ int linux_sdio_cmd52(sdio_cmd52_t *cmd){
 		} else {
 			sdio_writeb(func, cmd->data, cmd->address, &ret);
 		}
-	} else {	/* read */
+	} else {
 		data = sdio_readb(func, cmd->address, &ret);
 		cmd->data = data;
 	}
@@ -84,8 +92,8 @@ int linux_sdio_cmd52(sdio_cmd52_t *cmd){
 	return 1;
 }
 
-
- int linux_sdio_cmd53(sdio_cmd53_t *cmd){
+int linux_sdio_cmd53(struct sdio_cmd53_t *cmd)
+{
 	struct sdio_func *func = local_sdio_func;
 	int size, ret;
 
@@ -98,14 +106,19 @@ int linux_sdio_cmd52(sdio_cmd52_t *cmd){
 	else
 		size = cmd->count;
 
-	if (cmd->read_write) {	/* write */
-		ret = sdio_memcpy_toio(func, cmd->address, (void *)cmd->buffer, size);		
-	} else {	/* read */
-		ret = sdio_memcpy_fromio(func, (void *)cmd->buffer, cmd->address,  size);		
+	if (cmd->read_write) {
+		ret = sdio_memcpy_toio(func,
+				       cmd->address,
+				       (void *)cmd->buffer,
+				       size);
+	} else {
+		ret = sdio_memcpy_fromio(func,
+					 (void *)cmd->buffer,
+					 cmd->address,
+					 size);
 	}
 
 	sdio_release_host(func);
-
 
 	if (ret < 0) {
 		PRINT_ER("wilc_sdio_cmd53..failed, err(%d)\n", ret);
@@ -115,19 +128,11 @@ int linux_sdio_cmd52(sdio_cmd52_t *cmd){
 	return 1;
 }
 
-volatile int probe = 0; //COMPLEMENT_BOOT
-static int linux_sdio_probe(struct sdio_func *func, const struct sdio_device_id *id){	
-	PRINT_D(INIT_DBG,"probe function\n");
+static int linux_sdio_probe(struct sdio_func *func,
+			    const struct sdio_device_id *id)
+{
+	PRINT_D(INIT_DBG, "probe function\n");
 
-#ifdef COMPLEMENT_BOOT
-	if(local_sdio_func != NULL)
-	{		
-		local_sdio_func = func;
-		probe = 1;
-		PRINT_D(INIT_DBG,"local_sdio_func isn't NULL\n");
-		return 0;
-	}
-#endif
 	PRINT_D(INIT_DBG,"Initializing netdev\n");
 	local_sdio_func = func;
 	if(wilc_netdev_init()){
@@ -135,42 +140,32 @@ static int linux_sdio_probe(struct sdio_func *func, const struct sdio_device_id 
 		return -1;
 	}
 
-	printk("Driver Initializing success\n");
+
 	return 0;
 }
 
 static void linux_sdio_remove(struct sdio_func *func)
 {
-	/**
-		TODO
-	**/
-	
 }
-#if defined(HAS_SUSPEND_RESUME)&& defined(WILC_OPTIMIZE_SLEEP_INT)
-int sdio_init(wilc_wlan_inp_t *inp, wilc_debug_func func);
-int wilc_sdio_reset(void *pv);
-void chip_sleep_manually(WILC_Uint32 u32SleepTime);
-void chip_wakeup(void);
-void host_wakeup_notify(void);
-void host_sleep_notify(void);
-void chip_allow_sleep(void);
 
-extern uint8_t u8SuspendOnEvent;
 static int wilc_sdio_suspend(struct device *dev)
 {
 	printk("\n\n << SUSPEND >>\n\n");
 	chip_wakeup();
 	/*if there is no events , put the chip in low power mode */
-	if(u8SuspendOnEvent == 0)
+	if(u8ResumeOnEvent == 0)
 		chip_sleep_manually(0xffffffff);
 	else
 	{
-	/*notify the chip that host will sleep*/
+		/*notify the chip that host will sleep*/
 		host_sleep_notify();
 		chip_allow_sleep();
 	}
+
+	if((g_linux_sdio_os_context.hif_critical_section) != NULL)
+		mutex_lock((struct mutex*)(g_linux_sdio_os_context.hif_critical_section));
 	/*reset SDIO to allow kerenl reintilaization at wake up*/
-	wilc_sdio_reset(NULL);
+	sdio_reset(NULL);
 	/*claim the host to prevent driver SDIO access before resume is called*/
 	sdio_claim_host(local_sdio_func);
 	return 0 ;
@@ -181,40 +176,45 @@ static int wilc_sdio_resume(struct device *dev)
 	sdio_release_host(local_sdio_func);
 	/*wake the chip to compelete the re-intialization*/
 	chip_wakeup();
-	printk("\n\n << RESUME >>\n\n");
+	printk("\n\n << RESUME >>\n\n");	
 	/*Init SDIO block mode*/
-	sdio_init(NULL,NULL);
+	sdio_init(NULL);
+
+	if((g_linux_sdio_os_context.hif_critical_section)!= NULL){
+		if (mutex_is_locked((struct mutex*)(g_linux_sdio_os_context.hif_critical_section))){
+			mutex_unlock((struct mutex*)(g_linux_sdio_os_context.hif_critical_section));
+		}
+	}
+
 	/*if there is an event , notify the chip that the host is awake now*/
-	if(u8SuspendOnEvent == 1)
+	if(u8ResumeOnEvent == 1)
 		host_wakeup_notify();
 
 	chip_allow_sleep();
     return 0;
 
 }
-#endif
-#if defined(HAS_SUSPEND_RESUME)&& defined(WILC_OPTIMIZE_SLEEP_INT)
+
 static const struct dev_pm_ops wilc_sdio_pm_ops = {	
-     .suspend 	= wilc_sdio_suspend,    
-     .resume    = wilc_sdio_resume,     
-     };
-#endif
+     .suspend = wilc_sdio_suspend,    
+     .resume    = wilc_sdio_resume,
+    	};
+
 struct sdio_driver wilc_bus = {
 	.name		= SDIO_MODALIAS,
 	.id_table	= wilc_sdio_ids,
 	.probe		= linux_sdio_probe,
 	.remove		= linux_sdio_remove,
-#if defined(HAS_SUSPEND_RESUME)&& defined(WILC_OPTIMIZE_SLEEP_INT)
+
     .drv      = {
                   .pm = &wilc_sdio_pm_ops,
                }
-#endif
 };
 
-int enable_sdio_interrupt(void){
+int enable_sdio_interrupt(void)
+{
 	int ret = 0;
 #ifndef WILC_SDIO_IRQ_GPIO
-	
 	sdio_claim_host(local_sdio_func);
 	ret = sdio_claim_irq(local_sdio_func, wilc_sdio_interrupt);
 	sdio_release_host(local_sdio_func);
@@ -222,79 +222,36 @@ int enable_sdio_interrupt(void){
 	if (ret < 0) {
 		PRINT_ER("can't claim sdio_irq, err(%d)\n", ret);
 		ret = -EIO;
-	}	
-#endif
+	}
+#endif /* WILC_SDIO_IRQ_GPIO */
 	return ret;
 }
 
-void disable_sdio_interrupt(void){
-
+void disable_sdio_interrupt(void)
+{
 #ifndef WILC_SDIO_IRQ_GPIO
 	int ret;
 
-	PRINT_D(INIT_DBG,"disable_sdio_interrupt IN\n");
 
 	sdio_claim_host(local_sdio_func);
 	ret = sdio_release_irq(local_sdio_func);
-	if (ret < 0) {
+	if (ret < 0)
 		PRINT_ER("can't release sdio_irq, err(%d)\n", ret);
-	}
+
 	sdio_release_host(local_sdio_func);
-	
-	PRINT_D(INIT_DBG,"disable_sdio_interrupt OUT\n");
-#endif
+#endif /* WILC_SDIO_IRQ_GPIO */
 }
 
-static int linux_sdio_set_speed(int speed)
+int linux_sdio_init(void *pv)
 {
-	struct mmc_ios ios;
-	sdio_claim_host(local_sdio_func);
-	
-	memcpy((void *)&ios,(void *)&local_sdio_func->card->host->ios,sizeof(struct mmc_ios));
-	local_sdio_func->card->host->ios.clock = speed;
-	ios.clock = speed;
-	local_sdio_func->card->host->ops->set_ios(local_sdio_func->card->host,&ios);
-	sdio_release_host(local_sdio_func);
-	PRINT_INFO(INIT_DBG,"@@@@@@@@@@@@ change SDIO speed to %d @@@@@@@@@\n", speed);
-
+	PRINT_D(INIT_DBG, "SDIO speed: %d\n", 
+		local_sdio_func->card->host->ios.clock);
+	memcpy(&g_linux_sdio_os_context,(struct wilc_wlan_os_context*) pv,sizeof(struct wilc_wlan_os_context));
 	return 1;
 }
 
-static int linux_sdio_get_speed(void)
+void linux_sdio_deinit(void *pv)
 {
-	return local_sdio_func->card->host->ios.clock;
-}
-
-int linux_sdio_init(void* pv){
-
-	/**
-		TODO : 
-	**/
-
-
-	sdio_default_speed = linux_sdio_get_speed();
-	return 1;
-}
-
-void linux_sdio_deinit(void *pv){
-
-	/**
-		TODO : 
-	**/
-
-
 	sdio_unregister_driver(&wilc_bus);
 }
-
-int linux_sdio_set_max_speed(void)
-{
-	return linux_sdio_set_speed(MAX_SPEED);
-}
-
-int linux_sdio_set_default_speed(void)
-{
-	return linux_sdio_set_speed(sdio_default_speed);
-}
-
-
 

@@ -35,22 +35,6 @@
 #include <linux/version.h>
 #include "linux/string.h"
 
-#include "wilc_oswrapper.h"
-#include "itypes.h"
-#include "coreconfigurator.h"
-
-extern WILC_Uint8 connecting;
-
-#ifdef DISABLE_PWRSAVE_AND_SCAN_DURING_IP
-extern WILC_TimerHandle hDuringIpTimer;
-#endif
-
-/*BugID_5137*/
-extern WILC_Uint8 g_wilc_initialized;
-/*****************************************************************************/
-/*								Macros										 */
-/*****************************************************************************/ 
-
 /* Message types of the Host IF Message Queue*/
 #define HOST_IF_MSG_SCAN					((u16)0)
 #define HOST_IF_MSG_CONNECT					((u16)1)
@@ -94,6 +78,10 @@ extern WILC_Uint8 g_wilc_initialized;
 #define HOST_IF_MSG_GET_TX_POWER			((u16)39)
 #define HOST_IF_MSG_SET_ANTENNA_MODE		((u16)40)
 #define HOST_IF_MSG_SEND_BUFFERED_EAP		((u16)41)
+#ifdef WILC_BT_COEXISTENCE
+#define HOST_IF_MSG_CHANGE_BT_COEX_MODE		((u16)42)
+#endif
+#define HOST_IF_MSG_SET_WOWLAN_TRIGGER 		((u16)43)
 
 #define HOST_IF_MSG_EXIT					((u16)100)
 
@@ -329,6 +317,10 @@ struct tstrHostIfStaInactive {
 	u8 mac[6];
 };
 
+struct tstrHostIFWowlanTrigger
+{
+	u8 u8WowlanTrigger;
+};
 struct tstrHostIFTxPwr
 {
 	u8 u8TxPwr;
@@ -336,6 +328,15 @@ struct tstrHostIFTxPwr
 struct tstrHostIFGetTxPwr
 {
 	u8* u8TxPwr;
+};
+
+struct tstrHostIFSetAnt
+{
+	u8 mode;
+	u8 antenna1;
+#ifdef ANT_SWTCH_DUAL_GPIO_CTRL
+	u8 antenna2;
+#endif
 };
 
 /*
@@ -385,6 +386,11 @@ union tuniHostIFmsgBody {
 	struct tstrHostIFSendBufferedEAP strHostIFSendBufferedEAP;
 	struct tstrHostIFTxPwr strHostIFTxPwr;
 	struct tstrHostIFGetTxPwr strHostIFGetTxPwr;
+	struct tstrHostIFWowlanTrigger strHostIFWowlanTrigger;
+#ifdef WILC_BT_COEXISTENCE
+	struct tstrHostIFBTCoexMode strHostIfBTMode;
+#endif /* WILC_BT_COEXISTENCE */
+	struct tstrHostIFSetAnt strHostIFSetAnt;
 };
 
 /*
@@ -438,7 +444,7 @@ struct tstrJoinBssParam {
 	u8 au8StartTime[4];
 	#endif /* WILC_P2P */
 };
-/*Bug4218: Parsing Join Param*/
+
 /*
  * A linked list table containing needed join parameters entries for each
  * AP found in most recent scan
@@ -459,12 +465,9 @@ enum tenuScanConnTimer {
 struct WILC_WFIDrv *wfidrv_list[NUM_CONCURRENT_IFC + 1];
 struct WILC_WFIDrv *terminated_handle = NULL;
 struct WILC_WFIDrv *gWFiDrvHandle = NULL;
-#ifdef DISABLE_PWRSAVE_AND_SCAN_DURING_IP
-bool g_obtainingIP = false;
-#endif /* DISABLE_PWRSAVE_AND_SCAN_DURING_IP */
-u8 P2P_LISTEN_STATE = 0;
+
 static struct task_struct *HostIFthreadHandler;
-static WILC_MsgQueueHandle gMsgQHostIF;
+static struct MsgQueueHandle gMsgQHostIF;
 static struct semaphore hSemHostIFthrdEnd;
 
 struct semaphore hSemDeinitDrvHandle;
@@ -482,6 +485,7 @@ static u8 gapu8RcvdAssocResp[MAX_ASSOC_RESP_FRAME_SIZE];
 
 bool gbScanWhileConnected = false;
 
+static u8 au8NullBSSID[6] = {0};
 static s8 gs8Rssi = 0;
 static s8 gs8lnkspd = 0;
 static u8 gu8Chnl = 0;
@@ -547,7 +551,7 @@ static struct WILC_WFIDrv *get_handler_from_id(int id){
 		return NULL;
 	}
 	return wfidrv_list[id]; 
-} 
+}
 
 /*TicketId1001*/
 /*
@@ -565,7 +569,8 @@ static signed int Handle_SendBufferedEAP(void *drvHandler,
 	if (pstrHostIFSendBufferedEAP->pfFrmToLinux)
 		pstrHostIFSendBufferedEAP->pfFrmToLinux(pstrHostIFSendBufferedEAP->pu8Buff
 							, pstrHostIFSendBufferedEAP->u32Size
-							, pstrHostIFSendBufferedEAP->u32PktOffset);
+							, pstrHostIFSendBufferedEAP->u32PktOffset
+							, PKT_STATUS_BUFFERED);
 
 	/*Call a fucntion to free allocated eapol buffers in priv struct*/
 	if (pstrHostIFSendBufferedEAP->pfFreeEAPBuffParams)
@@ -581,8 +586,6 @@ static signed int Handle_SendBufferedEAP(void *drvHandler,
 	}
 	return s32Error;
 }
-
-extern void chip_sleep_manually(WILC_Uint32 u32SleepTime);
 
 /*
  * Sending config packet to firmware to set channel
@@ -714,7 +717,7 @@ static signed int Handle_SetOperationMode(void *drvHandler,
 	strWID.s32ValueSize = sizeof(unsigned int);
 
 	/*Sending Cfg*/
-	PRINT_D(HOSTINF_DBG, "(WILC_Uint32)pstrWFIDrv= %x \n",driver_handler_id);
+	PRINT_D(HOSTINF_DBG, "pstrWFIDrv= %x \n",driver_handler_id);
 	s32Error = SendConfigPkt(SET_CFG, &strWID, 1, true,driver_handler_id);
 
 	if ((pstrHostIfSetOperationMode->u32Mode) == (unsigned int)NULL)
@@ -1273,6 +1276,8 @@ static signed int Handle_Scan(void *drvHandler,
 	u8 valuesize = 0;
 	u8 *pu8HdnNtwrksWidVal = NULL;
 	struct WILC_WFIDrv *pstrWFIDrv = (struct WILC_WFIDrv *) drvHandler;
+	struct WILC_WFIDrv *pstrWFIDrvP2P  = (struct WILC_WFIDrv *) linux_wlan_get_drv_handler_by_ifc(P2P_IFC);
+	struct WILC_WFIDrv *pstrWFIDrvWLAN = (struct WILC_WFIDrv *) linux_wlan_get_drv_handler_by_ifc(WLAN_IFC);
 
 	PRINT_D(HOSTINF_DBG,"Setting SCAN params\n");
 	PRINT_D(HOSTINF_DBG,"Scanning: In [%d] state \n", pstrWFIDrv->enuHostIFstate);
@@ -1288,17 +1293,33 @@ static signed int Handle_Scan(void *drvHandler,
 	{
 		driver_handler_id = 0;
 	}
-	
-	if ((pstrWFIDrv->enuHostIFstate >= HOST_IF_SCANNING) &&
-	    (pstrWFIDrv->enuHostIFstate < HOST_IF_CONNECTED)) {
-	    /* here we either in HOST_IF_SCANNING, HOST_IF_WAITING_CONN_REQ or HOST_IF_WAITING_CONN_RESP */
-		PRINT_D(GENERIC_DBG,"Don't scan we are already in [%d] state\n",
-			 pstrWFIDrv->enuHostIFstate);
+
+	/* If one of the two host interfaces has any state other than IDLE or CONNECTED, then abort the scan */
+	if (pstrWFIDrvP2P != NULL) {
+		if ((pstrWFIDrvP2P->enuHostIFstate != HOST_IF_IDLE) &&
+	    (pstrWFIDrvP2P->enuHostIFstate != HOST_IF_CONNECTED)) {
+			PRINT_D(GENERIC_DBG,"Don't scan. P2P_IFC is in state [%d]\n",
+			 pstrWFIDrvP2P->enuHostIFstate);
+			WILC_ERRORREPORT(s32Error, WILC_BUSY);
+		}
+	}
+
+	if (pstrWFIDrvWLAN != NULL) {
+		if ((pstrWFIDrvWLAN->enuHostIFstate != HOST_IF_IDLE) &&
+	    (pstrWFIDrvWLAN->enuHostIFstate != HOST_IF_CONNECTED)) {
+			PRINT_D(GENERIC_DBG,"Don't scan. WLAN_IFC is in state [%d]\n",
+			 pstrWFIDrvWLAN->enuHostIFstate);
+			WILC_ERRORREPORT(s32Error, WILC_BUSY);
+		}
+	}
+
+	if(connecting) {
+		PRINT_D(GENERIC_DBG, "[handle_scan]: Don't do scan in (CONNECTING) state\n");
 		WILC_ERRORREPORT(s32Error, WILC_BUSY);
 	}
 
 #ifdef DISABLE_PWRSAVE_AND_SCAN_DURING_IP
-	if (g_obtainingIP || connecting) {
+	if (get_obtaining_IP_flag()) {
 		PRINT_D(GENERIC_DBG, "[handle_scan]: Don't do obss scan until IP adresss is obtained\n");
 		WILC_ERRORREPORT(s32Error, WILC_BUSY);
 	}
@@ -1389,6 +1410,7 @@ static signed int Handle_Scan(void *drvHandler,
 		WILC_ERRORREPORT(s32Error, s32Error);
 	} else {
 		PRINT_D(HOSTINF_DBG,"Successfully sent SCAN params config packet\n");
+		pstrWFIDrv->enuHostIFstate = HOST_IF_SCANNING;
 	}
 	WILC_CATCH(s32Error){
 		del_timer(&(pstrWFIDrv->hScanTimer));
@@ -1445,11 +1467,22 @@ signed int Handle_ScanDone(void *drvHandler, enum tenuScanEvent enuEvent)
 	{
 		driver_handler_id = 0;
 	}
+
+	/*If scan is aborted then host interface state is not changed so keep it as it is.*/
+	if(enuEvent == SCAN_EVENT_DONE){
+		/* If Associated BSSID is NULL, then the interface state must have been IDLE before scanning */
+		/* Otherwise, the interface state must have been CONNECTED before scanning */
+		if (memcmp(pstrWFIDrv->au8AssociatedBSSID, au8NullBSSID, ETH_ALEN) == 0) {
+			pstrWFIDrv->enuHostIFstate = HOST_IF_IDLE;
+		} else {
+			pstrWFIDrv->enuHostIFstate = HOST_IF_CONNECTED;
+		}
+	}
 	
 	/*BugID_4978
 	*Ask FW to abort the running scan, if any
 	*/
-	if (enuEvent == SCAN_EVENT_ABORTED) {
+	else if (enuEvent == SCAN_EVENT_ABORTED) {
 		PRINT_D(GENERIC_DBG,"Abort running scan\n");		
 		u8abort_running_scan = 1;
 		strWID.u16WIDid	= (u16)WID_ABORT_RUNNING_SCAN;
@@ -1491,6 +1524,8 @@ static signed int Handle_Connect(void *drvHandler,
 				 struct tstrHostIFconnectAttr *pstrHostIFconnectAttr)
 {
 	struct WILC_WFIDrv *pstrWFIDrv = (struct WILC_WFIDrv *) drvHandler;
+	struct WILC_WFIDrv *pstrWFIDrvP2P  = (struct WILC_WFIDrv *) linux_wlan_get_drv_handler_by_ifc(P2P_IFC);
+	struct WILC_WFIDrv *pstrWFIDrvWLAN = (struct WILC_WFIDrv *) linux_wlan_get_drv_handler_by_ifc(WLAN_IFC);
 	signed int s32Error = WILC_SUCCESS;
 	struct tstrWID strWIDList[8];
 	int driver_handler_id = 0;
@@ -1516,6 +1551,23 @@ static signed int Handle_Connect(void *drvHandler,
 	else
 	{
 		driver_handler_id = 0;
+	}
+
+	/* If any interface is already scanning, then abort the scan */
+	if (pstrWFIDrvP2P != NULL) {
+		if (pstrWFIDrvP2P->enuHostIFstate == HOST_IF_SCANNING) {
+			PRINT_D(GENERIC_DBG,"Don't scan. P2P_IFC is in state [%d]\n",
+			 pstrWFIDrvP2P->enuHostIFstate);
+			WILC_ERRORREPORT(s32Error, WILC_BUSY);
+		}
+	}
+
+	if (pstrWFIDrvWLAN != NULL) {
+		if (pstrWFIDrvWLAN->enuHostIFstate == HOST_IF_SCANNING) {
+			PRINT_D(GENERIC_DBG,"Don't scan. WLAN_IFC is in state [%d]\n",
+			 pstrWFIDrvWLAN->enuHostIFstate);
+			WILC_ERRORREPORT(s32Error, WILC_BUSY);
+		}
 	}
 
 #ifndef CONNECT_DIRECT
@@ -2468,19 +2520,13 @@ static signed int Handle_RcvdGnrlAsyncInfo(void *drvHandler,
 			*/
 			if ((u8MacStatus == MAC_CONNECTED) &&
 			    (strConnectInfo.u16ConnectStatus == SUCCESSFUL_STATUSCODE))	{
-#ifdef DISABLE_PWRSAVE_AND_SCAN_DURING_IP
-
-				host_int_set_power_mgmt((struct WFIDrvHandle *)pstrWFIDrv, 0, 0);
-#endif /* DISABLE_PWRSAVE_AND_SCAN_DURING_IP */
 
 				PRINT_D(HOSTINF_DBG, "MAC status : CONNECTED and Connect Status : Successful\n");
 				pstrWFIDrv->enuHostIFstate = HOST_IF_CONNECTED;
 
 #ifdef DISABLE_PWRSAVE_AND_SCAN_DURING_IP
-				PRINT_D(GENERIC_DBG, "Obtaining an IP, Disable Scan\n");
-				g_obtainingIP = true;
-				hDuringIpTimer.data = (unsigned long)NULL;
-				mod_timer(&hDuringIpTimer, (jiffies + msecs_to_jiffies(10000)));
+
+				handle_pwrsave_during_obtainingIP(pstrWFIDrv, IP_STATE_OBTAINING);
 #endif /* DISABLE_PWRSAVE_AND_SCAN_DURING_IP */
 			} else {
 				PRINT_D(HOSTINF_DBG, "MAC status : %d and Connect Status : %d\n", u8MacStatus, strConnectInfo.u16ConnectStatus);
@@ -2535,8 +2581,7 @@ static signed int Handle_RcvdGnrlAsyncInfo(void *drvHandler,
 			if (pstrWFIDrv->strWILC_UsrConnReq.pfUserConnectResult != NULL) {
 #ifdef DISABLE_PWRSAVE_AND_SCAN_DURING_IP
 
-				g_obtainingIP = false;
-				host_int_set_power_mgmt((struct WFIDrvHandle *)pstrWFIDrv, 0, 0);
+				handle_pwrsave_during_obtainingIP(pstrWFIDrv, IP_STATE_DEFAULT);
 #endif /* DISABLE_PWRSAVE_AND_SCAN_DURING_IP */
 
 				pstrWFIDrv->strWILC_UsrConnReq.pfUserConnectResult(CONN_DISCONN_EVENT_DISCONN_NOTIF,
@@ -2938,6 +2983,8 @@ static void Handle_Disconnect(void *drvHandler)
 	signed int s32Error = WILC_SUCCESS;
 	u16 u16DummyReasonCode = 0;
 	struct WILC_WFIDrv *pstrWFIDrv = (struct WILC_WFIDrv *)drvHandler;
+	struct WILC_WFIDrv *pstrWFIDrvP2P  = (struct WILC_WFIDrv *) linux_wlan_get_drv_handler_by_ifc(P2P_IFC);
+	struct WILC_WFIDrv *pstrWFIDrvWLAN = (struct WILC_WFIDrv *) linux_wlan_get_drv_handler_by_ifc(WLAN_IFC);
 
 	if(pstrWFIDrv != NULL)
 	{
@@ -2946,6 +2993,29 @@ static void Handle_Disconnect(void *drvHandler)
 	else
 	{
 		driver_handler_id = 0;
+	}
+
+	/* If any interface is scanning, then abort it before proceeding with the disconnect */
+	if (pstrWFIDrvWLAN != NULL)
+	{
+		if (pstrWFIDrvWLAN->enuHostIFstate == HOST_IF_SCANNING) 
+		{
+			PRINT_D(GENERIC_DBG,"Abort Scan before disconnecting. WLAN_IFC is in state [%d]\n",
+				pstrWFIDrvWLAN->enuHostIFstate);
+			del_timer(&(pstrWFIDrvWLAN->hScanTimer));
+			Handle_ScanDone(pstrWFIDrvWLAN, SCAN_EVENT_ABORTED);
+		}
+	}
+
+	if (pstrWFIDrvP2P != NULL)
+	{
+		if (pstrWFIDrvP2P->enuHostIFstate == HOST_IF_SCANNING)
+		{
+			PRINT_D(GENERIC_DBG,"Abort Scan before disconnecting. P2P_IFC is in state [%d]\n",
+				 pstrWFIDrvP2P->enuHostIFstate);
+			del_timer(&(pstrWFIDrvP2P->hScanTimer));
+			Handle_ScanDone(pstrWFIDrvP2P, SCAN_EVENT_ABORTED);
+		}
 	}
 	
 	strWID.u16WIDid = (u16)WID_DISCONNECT;
@@ -2957,8 +3027,7 @@ static void Handle_Disconnect(void *drvHandler)
 
 #ifdef DISABLE_PWRSAVE_AND_SCAN_DURING_IP
 
-	g_obtainingIP = false;
-	host_int_set_power_mgmt((struct WFIDrvHandle *)pstrWFIDrv, 0, 0);
+	handle_pwrsave_during_obtainingIP(pstrWFIDrv, IP_STATE_DEFAULT);
 #endif /* DISABLE_PWRSAVE_AND_SCAN_DURING_IP */
 
 	memset(u8ConnectedSSID, 0, ETH_ALEN);
@@ -3242,7 +3311,7 @@ static void Handle_GetLinkspeed(void *drvHandler)
 #ifdef TCP_ENHANCEMENTS
 #define TCP_ACK_FILTER_LINK_SPEED_THRESH 54
 #define DEFAULT_LINK_SPEED 72
-extern void Enable_TCP_ACK_Filter(WILC_Bool value);
+extern void Enable_TCP_ACK_Filter(bool value);
 #endif
 
 struct tstrStatistics gDummyStatistics;
@@ -3297,18 +3366,18 @@ signed int Handle_GetStatistics(void *drvHandler,
 
 	if (s32Error)
 		PRINT_ER("Failed to send scan paramters config packet\n");
-	#ifdef TCP_ENHANCEMENTS
+#ifdef TCP_ENHANCEMENTS
 	if((pstrStatistics->u8LinkSpeed > TCP_ACK_FILTER_LINK_SPEED_THRESH) && (pstrStatistics->u8LinkSpeed != DEFAULT_LINK_SPEED))
 	{
 		PRINT_D(HOSTINF_DBG, "Enable TCP filter\n");
-		Enable_TCP_ACK_Filter(WILC_TRUE);
+		Enable_TCP_ACK_Filter(true);
 	}
 	else if( pstrStatistics->u8LinkSpeed != DEFAULT_LINK_SPEED)
 	{
 		PRINT_D(HOSTINF_DBG, "Disable TCP filter %d\n",pstrStatistics->u8LinkSpeed);
-		Enable_TCP_ACK_Filter(WILC_FALSE);
+		Enable_TCP_ACK_Filter(false);
 	}
-	#endif
+#endif
 	if(pstrStatistics != &gDummyStatistics)
 		up(&hWaitResponse);
 
@@ -3768,7 +3837,9 @@ static int Handle_RemainOnChan(void *drvHandler,
 	u8 u8remain_on_chan_flag;
 	struct tstrWID strWID;
 	int driver_handler_id = 0;
-	struct WILC_WFIDrv *pstrWFIDrv = (struct WILC_WFIDrv *) drvHandler;
+	struct WILC_WFIDrv *pstrWFIDrv = (struct WILC_WFIDrv *) drvHandler;	
+	struct WILC_WFIDrv *pstrWFIDrvP2P  = (struct WILC_WFIDrv *) linux_wlan_get_drv_handler_by_ifc(P2P_IFC);
+	struct WILC_WFIDrv *pstrWFIDrvWLAN = (struct WILC_WFIDrv *) linux_wlan_get_drv_handler_by_ifc(WLAN_IFC);
 
 	if(pstrWFIDrv != NULL)
 	{
@@ -3794,18 +3865,43 @@ static int Handle_RemainOnChan(void *drvHandler,
 		/*Set the channel to use it as a wid val*/
 		pstrHostIfRemainOnChan->u16Channel = pstrWFIDrv->strHostIfRemainOnChan.u16Channel;
 	}
-	if (pstrWFIDrv->strWILC_UsrScanReq.pfUserScanResult != NULL) {
-		PRINT_INFO(GENERIC_DBG,"Required to remain on chan while scanning return\n");
-		pstrWFIDrv->u8RemainOnChan_pendingreq = 1;
-		WILC_ERRORREPORT(s32Error, WILC_BUSY);
+
+	/* If any of the two interfaces is busy scanning, connecting, or listening, then report WILC_BUSY */
+	if (pstrWFIDrvP2P != NULL) {
+		if (pstrWFIDrvP2P->enuHostIFstate == HOST_IF_SCANNING) {
+			PRINT_D(GENERIC_DBG,"Interface busy scanning. P2P_IFC is in state [%d]\n",
+				pstrWFIDrvP2P->enuHostIFstate);
+			pstrWFIDrv->u8RemainOnChan_pendingreq = 1;
+			WILC_ERRORREPORT(s32Error, WILC_BUSY);
+		} else if ((pstrWFIDrvP2P->enuHostIFstate != HOST_IF_IDLE) &&
+		(pstrWFIDrvP2P->enuHostIFstate != HOST_IF_CONNECTED)) {
+			PRINT_D(GENERIC_DBG,"Interface busy connecting or listening. P2P_IFC is in state [%d]\n",
+			 pstrWFIDrvP2P->enuHostIFstate);
+			WILC_ERRORREPORT(s32Error, WILC_BUSY);
+		}
 	}
-	if (pstrWFIDrv->enuHostIFstate == HOST_IF_WAITING_CONN_RESP) {
-		PRINT_INFO(GENERIC_DBG,"Required to remain on chan while connecting return\n");
+
+	if (pstrWFIDrvWLAN != NULL) {
+		if (pstrWFIDrvWLAN->enuHostIFstate == HOST_IF_SCANNING) {
+			PRINT_D(GENERIC_DBG,"Interface busy scanning. WLAN_IFC is in state [%d]\n",
+				pstrWFIDrvWLAN->enuHostIFstate);
+			pstrWFIDrv->u8RemainOnChan_pendingreq = 1;
+			WILC_ERRORREPORT(s32Error, WILC_BUSY);
+		} else if ((pstrWFIDrvWLAN->enuHostIFstate != HOST_IF_IDLE) &&
+		(pstrWFIDrvWLAN->enuHostIFstate != HOST_IF_CONNECTED)) {
+			PRINT_D(GENERIC_DBG,"Interface busy connecting or listening. WLAN_IFC is in state [%d]\n",
+			 pstrWFIDrvWLAN->enuHostIFstate);
+			WILC_ERRORREPORT(s32Error, WILC_BUSY);
+		}
+	}
+
+	if(connecting) {
+		PRINT_D(GENERIC_DBG, "[handle_scan]: Don't do scan in (CONNECTING) state\n");
 		WILC_ERRORREPORT(s32Error, WILC_BUSY);
 	}
 
 #ifdef DISABLE_PWRSAVE_AND_SCAN_DURING_IP
-	if (g_obtainingIP || connecting) {
+	if (get_obtaining_IP_flag()) {
 		PRINT_D(GENERIC_DBG, "[handle_scan]: Don't do obss scan until IP adresss is obtained\n");
 		WILC_ERRORREPORT(s32Error, WILC_BUSY);
 	}
@@ -3830,9 +3926,7 @@ static int Handle_RemainOnChan(void *drvHandler,
 	if (s32Error != WILC_SUCCESS)
 		PRINT_ER("Failed to set remain on channel\n");
 
-	WILC_CATCH(s32Error){
-	}
-	P2P_LISTEN_STATE = 1;
+	pstrWFIDrv->enuHostIFstate = HOST_IF_P2P_LISTEN;
 	pstrWFIDrv->hRemainOnChannel.data = (unsigned long)pstrWFIDrv;
 	mod_timer(&(pstrWFIDrv->hRemainOnChannel),
 	    (jiffies + msecs_to_jiffies(pstrHostIfRemainOnChan->u32duration)));
@@ -3843,6 +3937,9 @@ static int Handle_RemainOnChan(void *drvHandler,
 
 	if (pstrWFIDrv->u8RemainOnChan_pendingreq)
 		pstrWFIDrv->u8RemainOnChan_pendingreq = 0;
+
+	WILC_CATCH(s32Error){
+	}
 	return s32Error;
 }
 
@@ -3923,7 +4020,7 @@ static unsigned int Handle_ListenStateExpired(void *drvHandler,
 	/*BugID_5477*/
 	/*Make sure we are already in listen state*/
 	/*This is to handle duplicate expiry messages (listen timer fired and supplicant called cancel_remain_on_channel())*/
-	if (P2P_LISTEN_STATE) {
+	if (pstrWFIDrv->enuHostIFstate == HOST_IF_P2P_LISTEN) {
 		u8remain_on_chan_flag = false;
 		strWID.u16WIDid	= (u16)WID_REMAIN_ON_CHAN;
 		strWID.enuWIDtype	= WID_STR;
@@ -3948,7 +4045,12 @@ static unsigned int Handle_ListenStateExpired(void *drvHandler,
 		if (pstrWFIDrv->strHostIfRemainOnChan.pRemainOnChanExpired)
 			pstrWFIDrv->strHostIfRemainOnChan.pRemainOnChanExpired(pstrWFIDrv->strHostIfRemainOnChan.pVoid
 									       , pstrHostIfRemainOnChan->u32ListenSessionID);
-		P2P_LISTEN_STATE = 0;
+		
+		if (memcmp(pstrWFIDrv->au8AssociatedBSSID, au8NullBSSID, ETH_ALEN) == 0) {
+			pstrWFIDrv->enuHostIFstate = HOST_IF_IDLE;
+		} else {
+			pstrWFIDrv->enuHostIFstate = HOST_IF_CONNECTED;
+		}
 	} else {
 		PRINT_D(GENERIC_DBG, "Not in listen state\n");
 		s32Error = WILC_FAIL;
@@ -3984,7 +4086,7 @@ static void ListenTimerCB(unsigned long function_context)
 
 	/* send the message */
 	s32Error = WILC_MsgQueueSend(&gMsgQHostIF, &strHostIFmsg,
-				    sizeof(struct tstrHostIFmsg), WILC_NULL);
+				    sizeof(struct tstrHostIFmsg));
 	if (s32Error)
 		WILC_ERRORREPORT(s32Error, s32Error);
 	WILC_CATCH(s32Error){
@@ -4032,6 +4134,9 @@ static void Handle_PowerManagement(void *drvHandler,
 		PRINT_ER("Failed to send power management config packet\n");
 		WILC_ERRORREPORT(s32Error, WILC_INVALID_STATE);
 	}
+
+	/* Save the current status of the PS */
+	store_power_save_current_state(pstrWFIDrv, s8PowerMode);
 
 	WILC_CATCH(s32Error){
 	}
@@ -4133,7 +4238,7 @@ static signed int Handle_AddBASession(void *drvHandler,
 	strWID.ps8WidVal = kmalloc(BLOCK_ACK_REQ_SIZE, GFP_ATOMIC);
 	strWID.s32ValueSize = BLOCK_ACK_REQ_SIZE;
 	ptr = strWID.ps8WidVal;
-	WILC_memset(ptr, 0, strWID.s32ValueSize);
+	memset(ptr, 0, strWID.s32ValueSize);
 	*ptr++ = 0x14;
 	*ptr++ = 0x3;
 	*ptr++ = 0x0;
@@ -4164,7 +4269,7 @@ static signed int Handle_AddBASession(void *drvHandler,
 	strWID.enuWIDtype = WID_STR;
 	strWID.s32ValueSize = 15;
 	ptr = strWID.ps8WidVal;
-	WILC_memset(ptr, 0, strWID.s32ValueSize);
+	memset(ptr, 0, strWID.s32ValueSize);
 	*ptr++ = 15;
 	*ptr++ = 7;
 	*ptr++ = 0x2;
@@ -4256,6 +4361,43 @@ static signed int Handle_DelBASession(void *drvHandler,
 	return s32Error;
 }
 
+static signed int Handle_SetWowlanTrigger(void * drvHandler, u8 u8WowlanTrigger)
+{	
+	signed int s32Error = WILC_SUCCESS;
+	struct tstrWID strWID;
+	int driver_handler_id = 0;
+	struct WILC_WFIDrv * pstrWFIDrv = (struct WILC_WFIDrv *)drvHandler;
+
+	if(pstrWFIDrv != NULL)
+	{
+		driver_handler_id = pstrWFIDrv->driver_handler_id;
+	}
+	else
+	{
+		driver_handler_id = 0;
+	}
+	
+	strWID.u16WIDid = (u16)WID_WOWLAN_TRIGGER;
+	strWID.enuWIDtype = WID_CHAR;
+	strWID.ps8WidVal = (s8*)&u8WowlanTrigger;
+	strWID.s32ValueSize = sizeof(s8);	
+
+	s32Error = SendConfigPkt(SET_CFG, &strWID, 1, true, driver_handler_id);
+
+	if(s32Error)
+	{
+		PRINT_D(HOSTINF_DBG,"Failed to send wowlan trigger config packet\n");
+		WILC_ERRORREPORT(s32Error,WILC_FAIL);
+	}
+
+	WILC_CATCH(s32Error)
+	{
+
+	}
+
+	return s32Error;
+}
+
 static signed int Handle_SetTxPwr(void * drvHandler, u8 u8TxPwr)
 {	
 	signed int s32Error = WILC_SUCCESS;
@@ -4325,18 +4467,24 @@ static signed int Handle_GetTxPwr(void * drvHandler, u8* pu8TxPwr)
 	return s32Error; 
 }
 
-static signed int Handle_SetAntennaMode(void * drvHandler, u8 u8AntennaMode)
+static signed int Handle_SetAntennaMode(void * drvHandler,struct tstrHostIFSetAnt* strPtrSetAnt)
 {
 	int s32Error = WILC_SUCCESS;
 	struct tstrWID strWID;
 	struct WILC_WFIDrv * pstrWFIDrv = (struct WILC_WFIDrv *)drvHandler;
 	
-	strWID.u16WIDid 	= WID_ANTENNA_SELECTION;
-	strWID.enuWIDtype	= WID_CHAR;
-	strWID.s32ValueSize = sizeof(WILC_Char);
-	strWID.ps8WidVal 	= (u8*)(&u8AntennaMode);
-	PRINT_D(HOSTINF_DBG, "set antenna %d\n",u8AntennaMode);
-	s32Error = SendConfigPkt(SET_CFG, &strWID, 1, WILC_TRUE,(int)pstrWFIDrv);
+	strWID.u16WIDid 	= (u16)WID_ANTENNA_SELECTION;
+	strWID.enuWIDtype	= WID_BIN;
+	strWID.s32ValueSize = sizeof(struct tstrHostIFSetAnt);
+	strWID.ps8WidVal 	= (u8*)strPtrSetAnt;
+
+#ifdef ANT_SWTCH_SNGL_GPIO_CTRL
+	PRINT_D(CFG80211_DBG, "set antenna %d on GPIO %d\n",strPtrSetAnt->mode,strPtrSetAnt->antenna1);
+#elif defined(ANT_SWTCH_DUAL_GPIO_CTRL)
+	PRINT_D(CFG80211_DBG, "set antenna %d on GPIOs %d and %d\n",strPtrSetAnt->mode,strPtrSetAnt->antenna1,strPtrSetAnt->antenna2);
+#endif
+	
+	s32Error = SendConfigPkt(SET_CFG, &strWID, 1, true,(int)pstrWFIDrv);
 		
 	if(s32Error)
 	{
@@ -4359,7 +4507,7 @@ static int hostIFthread(void *pvArg)
 
 	while (1) {
 		WILC_MsgQueueRecv(&gMsgQHostIF, &strHostIFmsg,
-				 sizeof(struct tstrHostIFmsg), &u32Ret, WILC_NULL);
+				 sizeof(struct tstrHostIFmsg), &u32Ret);
 		pstrWFIDrv = (struct WILC_WFIDrv *)strHostIFmsg.drvHandler;
 		if (strHostIFmsg.u16MsgId == HOST_IF_MSG_EXIT) {
 			PRINT_D(GENERIC_DBG, "THREAD: Exiting HostIfThread\n");
@@ -4371,7 +4519,7 @@ static int hostIFthread(void *pvArg)
 			PRINT_D(GENERIC_DBG, "--WAIT--");
 			msleep(200);
 			WILC_MsgQueueSend(&gMsgQHostIF, &strHostIFmsg,
-					 sizeof(struct tstrHostIFmsg), WILC_NULL);
+					 sizeof(struct tstrHostIFmsg));
 			continue;
 		}
 
@@ -4379,7 +4527,7 @@ static int hostIFthread(void *pvArg)
 		    pstrWFIDrv->strWILC_UsrScanReq.pfUserScanResult != NULL) {
 			PRINT_D(HOSTINF_DBG, "Requeue connect request till scan done received\n");
 			WILC_MsgQueueSend(&gMsgQHostIF, &strHostIFmsg,
-					 sizeof(struct tstrHostIFmsg), WILC_NULL);
+					 sizeof(struct tstrHostIFmsg));
 			usleep_range(2000, 2100);
 			continue;
 		}
@@ -4685,9 +4833,15 @@ static int hostIFthread(void *pvArg)
 			}
 			case HOST_IF_MSG_SET_ANTENNA_MODE:
 			{
-				Handle_SetAntennaMode(strHostIFmsg.drvHandler,(WILC_Char)strHostIFmsg.uniHostIFmsgBody.pUserData);
+				Handle_SetAntennaMode(strHostIFmsg.drvHandler,&strHostIFmsg.uniHostIFmsgBody.strHostIFSetAnt);
 				break;				
 			}
+				case HOST_IF_MSG_SET_WOWLAN_TRIGGER:
+			{
+				Handle_SetWowlanTrigger(strHostIFmsg.drvHandler,strHostIFmsg.uniHostIFmsgBody.strHostIFWowlanTrigger.u8WowlanTrigger);
+				break;
+			}
+				
 			default:
 			{
 				PRINT_ER("[Host Interface] undefined Received Msg ID\n");
@@ -4715,7 +4869,7 @@ static void TimerCB_Scan(unsigned long function_context)
 
 	/* send the message */
 	WILC_MsgQueueSend(&gMsgQHostIF, &strHostIFmsg,
-			 sizeof(struct tstrHostIFmsg), WILC_NULL);
+			 sizeof(struct tstrHostIFmsg));
 }
 
 static void TimerCB_Connect(unsigned long function_context)
@@ -4729,7 +4883,7 @@ static void TimerCB_Connect(unsigned long function_context)
 
 	/* send the message */
 	WILC_MsgQueueSend(&gMsgQHostIF, &strHostIFmsg,
-			 sizeof(struct tstrHostIFmsg), WILC_NULL);
+			 sizeof(struct tstrHostIFmsg));
 }
 
 /*
@@ -4772,7 +4926,7 @@ signed int host_int_send_buffered_eap(struct WFIDrvHandle *hWFIDrv,
 
 	/* send the message */
 	s32Error = WILC_MsgQueueSend(&gMsgQHostIF, &strHostIFmsg,
-				    sizeof(struct tstrHostIFmsg), WILC_NULL);
+				    sizeof(struct tstrHostIFmsg));
 	if (s32Error) {
 		PRINT_ER("Failed to send message queue buffered eapol\n");
 		WILC_ERRORREPORT(s32Error, WILC_FAIL);
@@ -4828,7 +4982,7 @@ signed int host_int_remove_wep_key(struct WFIDrvHandle *hWFIDrv, u8 u8keyIdx)
 	uniHostIFkeyAttr.strHostIFwepAttr.u8Wepidx = u8keyIdx;
 
 	/* send the message */
-	s32Error = WILC_MsgQueueSend(&gMsgQHostIF, &strHostIFmsg, sizeof(struct tstrHostIFmsg), WILC_NULL);
+	s32Error = WILC_MsgQueueSend(&gMsgQHostIF, &strHostIFmsg, sizeof(struct tstrHostIFmsg));
 	if(s32Error)
 		PRINT_ER("Error in sending message queue : Request to remove WEP key\n");
 	else
@@ -4864,7 +5018,7 @@ signed int host_int_set_WEPDefaultKeyID(struct WFIDrvHandle *hWFIDrv, u8 u8Index
 	uniHostIFkeyAttr.strHostIFwepAttr.u8Wepidx = u8Index;
 
 	/* send the message */
-	s32Error = WILC_MsgQueueSend(&gMsgQHostIF, &strHostIFmsg, sizeof(struct tstrHostIFmsg), WILC_NULL);
+	s32Error = WILC_MsgQueueSend(&gMsgQHostIF, &strHostIFmsg, sizeof(struct tstrHostIFmsg));
 	if (s32Error)
 		PRINT_ER("Error in sending message queue : Default key index\n");
 	else
@@ -4922,7 +5076,7 @@ signed int host_int_add_wep_key_bss_sta(struct WFIDrvHandle *hWFIDrv,
 
 	/* send the message */
 	s32Error = WILC_MsgQueueSend(&gMsgQHostIF, &strHostIFmsg,
-				    sizeof(struct tstrHostIFmsg), WILC_NULL);
+				    sizeof(struct tstrHostIFmsg));
 	if (s32Error)
 		PRINT_ER("Error in sending message queue :WEP Key\n");
 	else
@@ -4984,7 +5138,7 @@ signed int host_int_add_wep_key_bss_ap(struct WFIDrvHandle *hWFIDrv,
 	strHostIFmsg.uniHostIFmsgBody.strHostIFkeyAttr.
 	uniHostIFkeyAttr.strHostIFwepAttr.tenuAuth_type = tenuAuth_type;
 	/* send the message */
-	s32Error = WILC_MsgQueueSend(&gMsgQHostIF, &strHostIFmsg, sizeof(struct tstrHostIFmsg), WILC_NULL);
+	s32Error = WILC_MsgQueueSend(&gMsgQHostIF, &strHostIFmsg, sizeof(struct tstrHostIFmsg));
 
 	if (s32Error)
 		PRINT_ER("Error in sending message queue :WEP Key\n");
@@ -5072,7 +5226,7 @@ signed int host_int_add_ptk(struct WFIDrvHandle *hWFIDrv, u8 *pu8Ptk,
 
 	/* send the message */
 	s32Error = WILC_MsgQueueSend(&gMsgQHostIF, &strHostIFmsg,
-				    sizeof(struct tstrHostIFmsg), WILC_NULL);
+				    sizeof(struct tstrHostIFmsg));
 
 	if (s32Error)
 		PRINT_ER("Error in sending message queue:  PTK Key\n");
@@ -5156,7 +5310,7 @@ signed int host_int_add_rx_gtk(struct WFIDrvHandle *hWFIDrv, u8 *pu8RxGtk,
 
 	/* send the message */
 	s32Error = WILC_MsgQueueSend(&gMsgQHostIF, &strHostIFmsg,
-				    sizeof(struct tstrHostIFmsg), WILC_NULL);
+				    sizeof(struct tstrHostIFmsg));
 	if (s32Error)
 		PRINT_ER("Error in sending message queue:  RX GTK\n");
 	else
@@ -5208,7 +5362,7 @@ signed int host_int_set_pmkid_info(struct WFIDrvHandle *hWFIDrv,
 		       PMKID_LEN);
 	}
 
-	s32Error = WILC_MsgQueueSend(&gMsgQHostIF, &strHostIFmsg, sizeof(struct tstrHostIFmsg), WILC_NULL);
+	s32Error = WILC_MsgQueueSend(&gMsgQHostIF, &strHostIFmsg, sizeof(struct tstrHostIFmsg));
 	if (s32Error)
 		PRINT_ER(" Error in sending messagequeue: PMKID Info\n");
 
@@ -5284,7 +5438,7 @@ signed int host_int_get_MacAddress(struct WFIDrvHandle *hWFIDrv,
 	strHostIFmsg.uniHostIFmsgBody.strHostIfGetMacAddress.u8MacAddress = pu8MacAddress;
 	strHostIFmsg.drvHandler = hWFIDrv;
 
-	s32Error = WILC_MsgQueueSend(&gMsgQHostIF, &strHostIFmsg, sizeof(struct tstrHostIFmsg), WILC_NULL);
+	s32Error = WILC_MsgQueueSend(&gMsgQHostIF, &strHostIFmsg, sizeof(struct tstrHostIFmsg));
 	if (s32Error) {
 		PRINT_ER("Failed to send get mac address\n");
 		return WILC_FAIL;
@@ -5314,7 +5468,7 @@ signed int host_int_set_MacAddress(struct WFIDrvHandle *hWFIDrv,
 	strHostIFmsg.drvHandler = hWFIDrv;
 
 	s32Error = WILC_MsgQueueSend(&gMsgQHostIF, &strHostIFmsg,
-				    sizeof(struct tstrHostIFmsg), WILC_NULL);
+				    sizeof(struct tstrHostIFmsg));
 	if (s32Error) {
 		PRINT_ER("Failed to send message queue: Set mac address\n");
 		WILC_ERRORREPORT(s32Error, s32Error);
@@ -5516,7 +5670,7 @@ signed int host_int_set_join_req(struct WFIDrvHandle *hWFIDrv, u8 *pu8bssid,
 	else
 		PRINT_D(GENERIC_DBG, "Don't set state to 'connecting' as state is %d\n", pstrWFIDrv->enuHostIFstate);
 
-	s32Error = WILC_MsgQueueSend(&gMsgQHostIF, &strHostIFmsg, sizeof(struct tstrHostIFmsg), WILC_NULL);
+	s32Error = WILC_MsgQueueSend(&gMsgQHostIF, &strHostIFmsg, sizeof(struct tstrHostIFmsg));
 	if (s32Error) {
 		PRINT_ER("Failed to send message queue: Set join request\n");
 		WILC_ERRORREPORT(s32Error, WILC_FAIL);
@@ -5556,7 +5710,7 @@ signed int host_int_flush_join_req(struct WFIDrvHandle *hWFIDrv)
 	strHostIFmsg.drvHandler = hWFIDrv;
 
 	s32Error = WILC_MsgQueueSend(&gMsgQHostIF, &strHostIFmsg,
-				    sizeof(struct tstrHostIFmsg), WILC_NULL);
+				    sizeof(struct tstrHostIFmsg));
 	if (s32Error) {
 		PRINT_ER("Failed to send message queue: Flush join request\n");
 		WILC_ERRORREPORT(s32Error, WILC_FAIL);
@@ -5595,7 +5749,7 @@ signed int host_int_disconnect(struct WFIDrvHandle *hWFIDrv, u16 u16ReasonCode)
 	strHostIFmsg.drvHandler = hWFIDrv;
 
 	s32Error = WILC_MsgQueueSend(&gMsgQHostIF, &strHostIFmsg,
-				    sizeof(struct tstrHostIFmsg), WILC_NULL);
+				    sizeof(struct tstrHostIFmsg));
 	if (s32Error)
 		PRINT_ER("Failed to send message queue: disconnect\n");
 	else
@@ -5750,7 +5904,7 @@ signed int host_int_set_mac_chnl_num(struct WFIDrvHandle *hWFIDrv, u8 u8ChNum)
 	strHostIFmsg.drvHandler = hWFIDrv;
 
 	s32Error = WILC_MsgQueueSend(&gMsgQHostIF, &strHostIFmsg,
-				    sizeof(struct tstrHostIFmsg), WILC_NULL);
+				    sizeof(struct tstrHostIFmsg));
 	if (s32Error)
 		WILC_ERRORREPORT(s32Error, s32Error);
 
@@ -5772,7 +5926,7 @@ signed int host_int_wait_msg_queue_idle(void)
 	memset(&strHostIFmsg, 0, sizeof(struct tstrHostIFmsg));
 	strHostIFmsg.u16MsgId = HOST_IF_MSG_Q_IDLE;
 	s32Error = WILC_MsgQueueSend(&gMsgQHostIF, &strHostIFmsg,
-				    sizeof(struct tstrHostIFmsg), WILC_NULL);
+				    sizeof(struct tstrHostIFmsg));
 	if (s32Error)
 		WILC_ERRORREPORT(s32Error, s32Error);
 	
@@ -5801,7 +5955,7 @@ signed int host_int_set_wfi_drv_handler(unsigned int u32address, u8 u8IfMode, ch
 	else if(!(memcmp(pcIfName, IFC_1, 4)))
 		strHostIFmsg.uniHostIFmsgBody.strHostIfSetDrvHandler.u8IfName = P2P_IFC;
 	s32Error = WILC_MsgQueueSend(&gMsgQHostIF, &strHostIFmsg,
-				    sizeof(struct tstrHostIFmsg), WILC_NULL);
+				    sizeof(struct tstrHostIFmsg));
 	if (s32Error)
 		WILC_ERRORREPORT(s32Error, s32Error);
 
@@ -5824,7 +5978,7 @@ signed int host_int_set_operation_mode(struct WFIDrvHandle *hWFIDrv,
 	strHostIFmsg.drvHandler = hWFIDrv;
 
 	s32Error = WILC_MsgQueueSend(&gMsgQHostIF, &strHostIFmsg,
-				    sizeof(struct tstrHostIFmsg), WILC_NULL);
+				    sizeof(struct tstrHostIFmsg));
 	if (s32Error)
 		WILC_ERRORREPORT(s32Error, s32Error);
 
@@ -5860,7 +6014,7 @@ signed int host_int_get_host_chnl_num(struct WFIDrvHandle *hWFIDrv, u8 *pu8ChNo)
 	strHostIFmsg.drvHandler = hWFIDrv;
 
 	s32Error = WILC_MsgQueueSend(&gMsgQHostIF, &strHostIFmsg,
-				    sizeof(struct tstrHostIFmsg), WILC_NULL);
+				    sizeof(struct tstrHostIFmsg));
 	if (s32Error)
 		PRINT_ER("Failed to send get host channel param's message queue\n");
 	else
@@ -5943,7 +6097,7 @@ signed int host_int_get_inactive_time(struct WFIDrvHandle *hWFIDrv, u8 *mac,
 	strHostIFmsg.drvHandler = hWFIDrv;
 
 	s32Error = WILC_MsgQueueSend(&gMsgQHostIF, &strHostIFmsg,
-				    sizeof(struct tstrHostIFmsg), WILC_NULL);
+				    sizeof(struct tstrHostIFmsg));
 	if (s32Error)
 		PRINT_ER("Failed to send get host channel param's message queue");
 	else
@@ -6019,7 +6173,7 @@ signed int host_int_get_rssi(struct WFIDrvHandle *hWFIDrv, s8 *ps8Rssi)
 	strHostIFmsg.drvHandler = hWFIDrv;
 
 	s32Error = WILC_MsgQueueSend(&gMsgQHostIF, &strHostIFmsg,
-				    sizeof(struct tstrHostIFmsg), WILC_NULL);
+				    sizeof(struct tstrHostIFmsg));
 	if (s32Error) {
 		PRINT_ER("Failed to send get host channel param's message queue\n");
 		return WILC_FAIL;
@@ -6051,7 +6205,7 @@ signed int host_int_get_link_speed(struct WFIDrvHandle *hWFIDrv, s8 *ps8lnkspd)
 	strHostIFmsg.drvHandler = hWFIDrv;
 
 	s32Error = WILC_MsgQueueSend(&gMsgQHostIF, &strHostIFmsg,
-				    sizeof(struct tstrHostIFmsg), WILC_NULL);
+				    sizeof(struct tstrHostIFmsg));
 	if (s32Error) {
 		PRINT_ER("Failed to send GET_LINKSPEED to message queue ");
 		return WILC_FAIL;
@@ -6083,7 +6237,7 @@ signed int host_int_get_statistics(struct WFIDrvHandle *hWFIDrv,
 	strHostIFmsg.drvHandler = hWFIDrv;
 
 	s32Error = WILC_MsgQueueSend(&gMsgQHostIF, &strHostIFmsg,
-				    sizeof(struct tstrHostIFmsg), WILC_NULL);
+				    sizeof(struct tstrHostIFmsg));
 	if (s32Error) {
 		PRINT_ER("Failed to send get host channel param's message queue\n");
 		return WILC_FAIL;
@@ -6141,7 +6295,7 @@ signed int host_int_scan(struct WFIDrvHandle *hWFIDrv, u8 u8ScanSource,
 	       pu8IEs, IEsLen);
 
 	s32Error = WILC_MsgQueueSend(&gMsgQHostIF, &strHostIFmsg,
-				    sizeof(struct tstrHostIFmsg), WILC_NULL);
+				    sizeof(struct tstrHostIFmsg));
 	if (s32Error) {
 		PRINT_ER("Error in sending message queue scanning parameters: Error(%d)\n",
 		       s32Error);
@@ -6180,8 +6334,7 @@ signed int hif_set_cfg(struct WFIDrvHandle *hWFIDrv,
 	strHostIFmsg.uniHostIFmsgBody.strHostIFCfgParamAttr.pstrCfgParamVal = *pstrCfgParamVal;
 	strHostIFmsg.drvHandler = hWFIDrv;
 
-	s32Error = WILC_MsgQueueSend(&gMsgQHostIF, &strHostIFmsg, 
-		sizeof(struct tstrHostIFmsg), WILC_NULL);
+	s32Error = WILC_MsgQueueSend(&gMsgQHostIF, &strHostIFmsg, sizeof(struct tstrHostIFmsg));
 
 	WILC_CATCH(s32Error){
 	}
@@ -6325,44 +6478,13 @@ signed int hif_get_cfg(struct WFIDrvHandle *hWFIDrv, u16 u16WID, u16 *pu16WID_Va
 	return s32Error;
 }
 
-/*****************************************************************************/
-/*							Notification Functions							 */
-/*****************************************************************************/
-/**
-*  @brief 		notifies host with join and leave requests
-*  @details 	This function prepares an Information frame having the
-				information about a joining/leaving station.
-*  @param[in,out] handle to the wifi driver,
-*  @param[in]	6 byte Sta Adress
-				Join or leave flag:
-				Join = 1,
-				Leave =0
-*  @return 		Error code indicating success/failure
-*  @note 		
-*  @author		zsalah
-*  @date		8 March 2012
-*  @version		1.0
-*/
-void host_int_send_join_leave_info_to_host
-						(WILC_Uint16 assocId, WILC_Uint8* stationAddr, WILC_Bool joining)
-{
-}
-/**
-*  @brief 		notifies host with stations found in scan
-*  @details 	sends the beacon/probe response from scan
-*  @param[in,out] handle to the wifi driver,
-*  @param[in]	Sta Address,
-				Frame length,
-				Rssi of the Station found
-*  @return 		Error code indicating success/failure
-*  @note 		
-*  @author		zsalah
-*  @date		8 March 2012
-*  @version		1.0
-*/
+/*
+ * Notifies host with stations found in scan
+ * sends the beacon/probe response from scan
+ */
 
-void GetPeriodicRSSI(void * pvArg)
-{	
+void GetPeriodicRSSI(unsigned long pvArg)
+{
 	struct WILC_WFIDrv * pstrWFIDrv = (struct WILC_WFIDrv *)pvArg;
 
 	if (pstrWFIDrv == NULL)	{
@@ -6403,7 +6525,7 @@ signed int host_int_init(struct WFIDrvHandle **phWFIDrv)
 
 	memset(pstrWFIDrv,0,sizeof(struct WILC_WFIDrv));
 	/*return driver handle to user*/
-	*phWFIDrv = pstrWFIDrv;
+	*phWFIDrv = (struct WFIDrvHandle *)pstrWFIDrv;
 	err = add_handler_in_list(pstrWFIDrv);
 	if (err){ 
 		s32Error = s32Error; 
@@ -6411,7 +6533,8 @@ signed int host_int_init(struct WFIDrvHandle **phWFIDrv)
 	}	
 	
 #ifdef DISABLE_PWRSAVE_AND_SCAN_DURING_IP
-	g_obtainingIP = false;
+
+	set_obtaining_IP_flag(false);
 #endif /* DISABLE_PWRSAVE_AND_SCAN_DURING_IP */
 
 	if (clients_count == 0)	{
@@ -6433,7 +6556,7 @@ signed int host_int_init(struct WFIDrvHandle **phWFIDrv)
 	PRINT_D(HOSTINF_DBG, "INIT: CLIENT COUNT %d\n", clients_count);
 
 	if (clients_count == 0)	{
-		WILC_MsgQueueCreate(&gMsgQHostIF, WILC_NULL);
+		WILC_MsgQueueCreate(&gMsgQHostIF);
 		msgQ_created = 1;
 
 		HostIFthreadHandler = kthread_run(hostIFthread, NULL,
@@ -6501,7 +6624,7 @@ _fail_mem_:
 	del_timer_sync(&(pstrWFIDrv->hScanTimer));
 	kthread_stop(HostIFthreadHandler);
 _fail_mq_:
-	WILC_MsgQueueDestroy(&gMsgQHostIF, WILC_NULL);
+	WILC_MsgQueueDestroy(&gMsgQHostIF);
 	kfree(pstrWFIDrv);
 
 	return s32Error;
@@ -6577,7 +6700,7 @@ signed int host_int_deinit(struct WFIDrvHandle *hWFIDrv, char* pcIfName, u8 u8If
 		strHostIFmsg.drvHandler = hWFIDrv;
 
 		s32Error = WILC_MsgQueueSend(&gMsgQHostIF, &strHostIFmsg,
-					    sizeof(struct tstrHostIFmsg), WILC_NULL);
+					    sizeof(struct tstrHostIFmsg));
 		if (s32Error != WILC_SUCCESS)
 			PRINT_ER("Error in sending deinit's message queue message function: Error(%d)\n", s32Error);
 		else			
@@ -6586,7 +6709,7 @@ signed int host_int_deinit(struct WFIDrvHandle *hWFIDrv, char* pcIfName, u8 u8If
 		kthread_stop(HostIFthreadHandler);
 		HostIFthreadHandler = NULL;
 		
-		WILC_MsgQueueDestroy(&gMsgQHostIF, WILC_NULL);
+		WILC_MsgQueueDestroy(&gMsgQHostIF);
 		msgQ_created = 0;
 	}
 
@@ -6605,7 +6728,7 @@ signed int host_int_deinit(struct WFIDrvHandle *hWFIDrv, char* pcIfName, u8 u8If
 /*
  * function to to be called when network info packet is received
  */
-void NetworkInfoReceived(u8 *pu8Buffer, unsigned int u32Length)
+void NetworkInfoReceived(u8 *pu8Buffer, u32 u32Length)
 {
 	signed int s32Error = WILC_SUCCESS;
 	struct tstrHostIFmsg strHostIFmsg;
@@ -6615,7 +6738,6 @@ void NetworkInfoReceived(u8 *pu8Buffer, unsigned int u32Length)
 	drvHandler = ((pu8Buffer[u32Length - 4]) | (pu8Buffer[u32Length - 3] << 8) |
 		     (pu8Buffer[u32Length - 2] << 16) | (pu8Buffer[u32Length - 1] << 24));
 	pstrWFIDrv = get_handler_from_id(drvHandler);
-
 
 	if (pstrWFIDrv == NULL || pstrWFIDrv == terminated_handle)
 		return;
@@ -6632,7 +6754,7 @@ void NetworkInfoReceived(u8 *pu8Buffer, unsigned int u32Length)
 	       pu8Buffer, u32Length);
 
 	s32Error = WILC_MsgQueueSend(&gMsgQHostIF, &strHostIFmsg,
-				    sizeof(struct tstrHostIFmsg), WILC_NULL);
+				    sizeof(struct tstrHostIFmsg));
 	if (s32Error)
 		PRINT_ER("Error in sending network info message queue message parameters: Error(%d)\n", s32Error);
 }
@@ -6640,7 +6762,7 @@ void NetworkInfoReceived(u8 *pu8Buffer, unsigned int u32Length)
 /*
  * function to be called when general Asynchronous info packet is received
  */
-void GnrlAsyncInfoReceived(u8 *pu8Buffer, unsigned int u32Length)
+void GnrlAsyncInfoReceived(u8 *pu8Buffer, u32 u32Length)
 {
 	signed int s32Error = WILC_SUCCESS;
 	struct tstrHostIFmsg strHostIFmsg;
@@ -6681,7 +6803,7 @@ void GnrlAsyncInfoReceived(u8 *pu8Buffer, unsigned int u32Length)
 	       pu8Buffer, u32Length);
 
 	s32Error = WILC_MsgQueueSend(&gMsgQHostIF, &strHostIFmsg,
-				    sizeof(struct tstrHostIFmsg), WILC_NULL);
+				    sizeof(struct tstrHostIFmsg));
 	if (s32Error)
 		PRINT_ER("Error in sending message queue asynchronous message info: Error(%d)\n", s32Error);
 
@@ -6692,7 +6814,7 @@ void GnrlAsyncInfoReceived(u8 *pu8Buffer, unsigned int u32Length)
 /*
  * Setting scan complete received notifcation in message queue
  */
-void host_int_ScanCompleteReceived(u8 *pu8Buffer, unsigned int u32Length)
+void host_int_ScanCompleteReceived(u8 *pu8Buffer, u32 u32Length)
 {
 	signed int s32Error = WILC_SUCCESS;
 	struct tstrHostIFmsg strHostIFmsg;
@@ -6703,12 +6825,10 @@ void host_int_ScanCompleteReceived(u8 *pu8Buffer, unsigned int u32Length)
 		     (pu8Buffer[u32Length - 2] << 16) | (pu8Buffer[u32Length - 1] << 24));
 	pstrWFIDrv = get_handler_from_id(drvHandler);
 
-	if(pstrWFIDrv== NULL||pstrWFIDrv==terminated_handle)
-	{
-		return;
-	}
+	PRINT_D(GENERIC_DBG, "Scan notification received\n");
 
-	PRINT_D(GENERIC_DBG,"Scan notification received %x\n", (WILC_Uint32)pstrWFIDrv);
+	if (pstrWFIDrv == NULL || pstrWFIDrv == terminated_handle)
+		return;
 
 	/*if there is an ongoing scan request*/	
 	if (pstrWFIDrv->strWILC_UsrScanReq.pfUserScanResult) {
@@ -6719,7 +6839,7 @@ void host_int_ScanCompleteReceived(u8 *pu8Buffer, unsigned int u32Length)
 		strHostIFmsg.drvHandler = pstrWFIDrv;
 
 		s32Error = WILC_MsgQueueSend(&gMsgQHostIF, &strHostIFmsg,
-					    sizeof(struct tstrHostIFmsg), WILC_NULL);
+					    sizeof(struct tstrHostIFmsg));
 		if (s32Error)
 			PRINT_ER("Error in sending message queue scan complete parameters: Error(%d)\n", s32Error);
 	}
@@ -6753,8 +6873,7 @@ signed int host_int_remain_on_channel(struct WFIDrvHandle *hWFIDrv,
 	strHostIFmsg.uniHostIFmsgBody.strHostIfRemainOnChan.u32ListenSessionID = u32SessionID;
 	strHostIFmsg.drvHandler = hWFIDrv;
 
-	s32Error = WILC_MsgQueueSend(&gMsgQHostIF, &strHostIFmsg,
-		sizeof(struct tstrHostIFmsg), WILC_NULL);
+	s32Error = WILC_MsgQueueSend(&gMsgQHostIF, &strHostIFmsg, sizeof(struct tstrHostIFmsg));
 	if (s32Error)
 		WILC_ERRORREPORT(s32Error, s32Error);
 
@@ -6784,7 +6903,7 @@ signed int host_int_ListenStateExpired(struct WFIDrvHandle *hWFIDrv,
 	strHostIFmsg.uniHostIFmsgBody.strHostIfRemainOnChan.u32ListenSessionID = u32SessionID;
 
 	s32Error = WILC_MsgQueueSend(&gMsgQHostIF, &strHostIFmsg,
-				    sizeof(struct tstrHostIFmsg), WILC_NULL);
+				    sizeof(struct tstrHostIFmsg));
 	if (s32Error)
 		WILC_ERRORREPORT(s32Error, s32Error);
 
@@ -6828,7 +6947,7 @@ signed int host_int_frame_register(struct WFIDrvHandle *hWFIDrv, u16 u16FrameTyp
 	strHostIFmsg.drvHandler = hWFIDrv;
 
 	s32Error = WILC_MsgQueueSend(&gMsgQHostIF, &strHostIFmsg,
-				    sizeof(struct tstrHostIFmsg), WILC_NULL);
+				    sizeof(struct tstrHostIFmsg));
 	if (s32Error)
 		WILC_ERRORREPORT(s32Error, s32Error);
 
@@ -6882,7 +7001,7 @@ signed int host_int_add_beacon(struct WFIDrvHandle *hWFIDrv,
 		pstrSetBeaconParam->pu8Tail = NULL;
 	}
 	s32Error = WILC_MsgQueueSend(&gMsgQHostIF, &strHostIFmsg,
-				    sizeof(struct tstrHostIFmsg), WILC_NULL);
+				    sizeof(struct tstrHostIFmsg));
 	if (s32Error)
 		WILC_ERRORREPORT(s32Error, s32Error);
 
@@ -6916,7 +7035,7 @@ signed int host_int_del_beacon(struct WFIDrvHandle *hWFIDrv)
 	PRINT_D(HOSTINF_DBG, "Setting deleting beacon message queue params\n");
 
 	s32Error = WILC_MsgQueueSend(&gMsgQHostIF, &strHostIFmsg,
-				    sizeof(struct tstrHostIFmsg), WILC_NULL);
+				    sizeof(struct tstrHostIFmsg));
 	WILC_ERRORCHECK(s32Error);
 
 	WILC_CATCH(s32Error){
@@ -6957,7 +7076,7 @@ signed int host_int_add_station(struct WFIDrvHandle *hWFIDrv,
 	}
 
 	s32Error = WILC_MsgQueueSend(&gMsgQHostIF, &strHostIFmsg,
-				    sizeof(struct tstrHostIFmsg), WILC_NULL);
+				    sizeof(struct tstrHostIFmsg));
 	if (s32Error)
 		WILC_ERRORREPORT(s32Error, s32Error);
 
@@ -6995,7 +7114,7 @@ signed int host_int_del_station(struct WFIDrvHandle *hWFIDrv, u8 *pu8MacAddr)
 		memcpy(pstrDelStationMsg->au8MacAddr, pu8MacAddr, ETH_ALEN);
 
 	s32Error = WILC_MsgQueueSend(&gMsgQHostIF, &strHostIFmsg,
-				    sizeof(struct tstrHostIFmsg), WILC_NULL);
+				    sizeof(struct tstrHostIFmsg));
 	if (s32Error)
 		WILC_ERRORREPORT(s32Error, s32Error);
 
@@ -7051,11 +7170,11 @@ signed int host_int_del_allstation(struct WFIDrvHandle *hWFIDrv,
 
 	pstrDelAllStationMsg->u8Num_AssocSta = u8AssocNumb;
 	s32Error = WILC_MsgQueueSend(&gMsgQHostIF, &strHostIFmsg,
-				    sizeof(struct tstrHostIFmsg), WILC_NULL);
+				    sizeof(struct tstrHostIFmsg));
 
 	if (s32Error)
 		WILC_ERRORREPORT(s32Error, s32Error);
-	
+
 	down(&hWaitResponse);
 
 	WILC_CATCH(s32Error){
@@ -7095,7 +7214,7 @@ signed int host_int_edit_station(struct WFIDrvHandle *hWFIDrv,
 	}
 
 	s32Error = WILC_MsgQueueSend(&gMsgQHostIF, &strHostIFmsg,
-				    sizeof(struct tstrHostIFmsg), WILC_NULL);
+				    sizeof(struct tstrHostIFmsg));
 	if (s32Error)
 		WILC_ERRORREPORT(s32Error, s32Error);
 
@@ -7136,7 +7255,7 @@ signed int host_int_set_power_mgmt(struct WFIDrvHandle *hWFIDrv,
 	pstrPowerMgmtParam->u32Timeout = u32Timeout;
 
 	s32Error = WILC_MsgQueueSend(&gMsgQHostIF, &strHostIFmsg,
-				    sizeof(struct tstrHostIFmsg), WILC_NULL);
+				    sizeof(struct tstrHostIFmsg));
 	if (s32Error)
 		WILC_ERRORREPORT(s32Error, s32Error);
 
@@ -7171,7 +7290,7 @@ signed int host_int_setup_multicast_filter(struct WFIDrvHandle *hWFIDrv,
 	pstrMulticastFilterParam->u32count = u32count;
 
 	s32Error = WILC_MsgQueueSend(&gMsgQHostIF, &strHostIFmsg,
-				    sizeof(struct tstrHostIFmsg), WILC_NULL);
+				    sizeof(struct tstrHostIFmsg));
 	if (s32Error)
 		WILC_ERRORREPORT(s32Error, s32Error);
 
@@ -7402,7 +7521,7 @@ static int host_int_addBASession(struct WFIDrvHandle *hWFIDrv, char *pBSSID,
 	strHostIFmsg.drvHandler = hWFIDrv;
 
 	s32Error = WILC_MsgQueueSend(&gMsgQHostIF, &strHostIFmsg,
-				    sizeof(struct tstrHostIFmsg), WILC_NULL);
+				    sizeof(struct tstrHostIFmsg));
 	if (s32Error)
 		WILC_ERRORREPORT(s32Error, s32Error);
 
@@ -7433,12 +7552,11 @@ signed int host_int_delBASession(struct WFIDrvHandle *hWFIDrv, char *pBSSID,
 	strHostIFmsg.drvHandler = hWFIDrv;
 
 	s32Error = WILC_MsgQueueSend(&gMsgQHostIF, &strHostIFmsg,
-				    sizeof(struct tstrHostIFmsg), WILC_NULL);
+				    sizeof(struct tstrHostIFmsg));
 	if (s32Error)
 		WILC_ERRORREPORT(s32Error, s32Error);
 
 	down(&hWaitResponse);
-	
 	WILC_CATCH(s32Error){
 	}
 
@@ -7451,41 +7569,7 @@ signed int host_int_delBASession(struct WFIDrvHandle *hWFIDrv, char *pBSSID,
 signed int host_int_setup_ipaddress(struct WFIDrvHandle *hWFIDrv, u8 *u16ipadd,
 				    u8 idx)
 {
-	WILC_Sint32 s32Error = WILC_SUCCESS;
-	struct WILC_WFIDrv * pstrWFIDrv = (struct WILC_WFIDrv *)hWFIDrv;
-	struct tstrHostIFmsg strHostIFmsg;
-
-	// TODO: Enable This feature on softap firmware
 	return 0;
-	
-	if(pstrWFIDrv == WILC_NULL)
-	{
-		WILC_ERRORREPORT(s32Error,WILC_INVALID_ARGUMENT);
-	}
-	
-	WILC_memset(&strHostIFmsg, 0, sizeof(struct tstrHostIFmsg));
-	
-	/* prepare the WiphyParams Message */
-	strHostIFmsg.u16MsgId = HOST_IF_MSG_SET_IPADDRESS;
-
-	strHostIFmsg.uniHostIFmsgBody.strHostIfSetIP.au8IPAddr= u16ipadd;
-	strHostIFmsg.drvHandler=hWFIDrv;
-	strHostIFmsg.uniHostIFmsgBody.strHostIfSetIP.idx = idx;
-
-	s32Error = WILC_MsgQueueSend(&gMsgQHostIF, &strHostIFmsg,
-				sizeof(struct tstrHostIFmsg), WILC_NULL);
-	if(s32Error)
-	{
-		WILC_ERRORREPORT(s32Error, s32Error);
-	}
-	WILC_CATCH(s32Error)
-	{
-	
-	}
-
-	return s32Error;
-
-
 }
 
 /*
@@ -7511,7 +7595,7 @@ signed int host_int_get_ipaddress(struct WFIDrvHandle *hWFIDrv, u8 *u16ipadd,
 	strHostIFmsg.uniHostIFmsgBody.strHostIfSetIP.idx = idx;
 
 	s32Error = WILC_MsgQueueSend(&gMsgQHostIF, &strHostIFmsg,
-				    sizeof(struct tstrHostIFmsg), WILC_NULL);
+				    sizeof(struct tstrHostIFmsg));
 	if (s32Error)
 		WILC_ERRORREPORT(s32Error, s32Error);
 
@@ -7542,8 +7626,8 @@ signed int host_int_set_tx_power(struct WFIDrvHandle *hWFIDrv, u8 tx_power)
 	strHostIFmsg.drvHandler=hWFIDrv;
 
 	/* send the message */
-	s32Error = WILC_MsgQueueSend(&gMsgQHostIF, &strHostIFmsg,
-					sizeof(struct tstrHostIFmsg), WILC_NULL);
+	s32Error = WILC_MsgQueueSend(&gMsgQHostIF, &strHostIFmsg, 
+					sizeof(struct tstrHostIFmsg));
 	if(s32Error)
 		PRINT_ER(" Error in sending messagequeue: PMKID Info\n");
 
@@ -7568,8 +7652,8 @@ signed int  host_int_get_tx_power(struct WFIDrvHandle * hWFIDrv, u8 *tx_power)
 	strHostIFmsg.drvHandler=hWFIDrv;
 	strHostIFmsg.uniHostIFmsgBody.strHostIFGetTxPwr.u8TxPwr=tx_power;
 	/* send the message */
-	s32Error = 	WILC_MsgQueueSend(&gMsgQHostIF, &strHostIFmsg, 
-					sizeof(struct tstrHostIFmsg), WILC_NULL);
+	s32Error = 	WILC_MsgQueueSend(&gMsgQHostIF, &strHostIFmsg,
+					sizeof(struct tstrHostIFmsg));
 	if(s32Error){
 		PRINT_ER("Failed to send get host channel param's message queue ");
 		return WILC_FAIL;
@@ -7580,25 +7664,71 @@ signed int  host_int_get_tx_power(struct WFIDrvHandle * hWFIDrv, u8 *tx_power)
 	return s32Error;
 }
 
-WILC_Sint32 host_int_set_antenna(struct WFIDrvHandle * hWFIDrv, u8 antenna_mode)
+s32 host_int_set_antenna(struct WFIDrvHandle * hWFIDrv, u8 antenna_mode)
 {
 	signed int s32Error = WILC_SUCCESS;	
 	struct tstrHostIFmsg strHostIFmsg;
-
 	
 	/* prepare the Get RSSI Message */
 	memset(&strHostIFmsg, 0, sizeof(struct tstrHostIFmsg));
 
 	strHostIFmsg.u16MsgId 	= HOST_IF_MSG_SET_ANTENNA_MODE;
-	strHostIFmsg.uniHostIFmsgBody.pUserData = (char*)antenna_mode;
+	strHostIFmsg.uniHostIFmsgBody.strHostIFSetAnt.mode= antenna_mode;
+#ifdef ANT_SWTCH_SNGL_GPIO_CTRL
+	#if(((ANT_1_GPIO_NUM >= 3) && (ANT_1_GPIO_NUM <= 6)) ||(ANT_1_GPIO_NUM == 1))
+			strHostIFmsg.uniHostIFmsgBody.strHostIFSetAnt.antenna1 = ANT_1_GPIO_NUM;
+	#else
+			return WILC_FAIL;
+	#endif
+#elif defined(ANT_SWTCH_DUAL_GPIO_CTRL)
+	#if((((ANT_1_GPIO_NUM >= 3) && (ANT_1_GPIO_NUM <= 6)) ||(ANT_1_GPIO_NUM == 1))\
+		&& (((ANT_2_GPIO_NUM >= 3) && (ANT_2_GPIO_NUM <= 6)) ||(ANT_2_GPIO_NUM == 1)))
+			strHostIFmsg.uniHostIFmsgBody.strHostIFSetAnt.antenna1 = ANT_1_GPIO_NUM;
+			strHostIFmsg.uniHostIFmsgBody.strHostIFSetAnt.antenna2 = ANT_2_GPIO_NUM;
+	#else
+			return WILC_FAIL;
+	#endif
+#endif
 	strHostIFmsg.drvHandler	= hWFIDrv;
 	/* send the message */
-	s32Error = 	WILC_MsgQueueSend(&gMsgQHostIF, &strHostIFmsg,
-					sizeof(struct tstrHostIFmsg), WILC_NULL);
+	s32Error = 	WILC_MsgQueueSend(&gMsgQHostIF, &strHostIFmsg, 
+					sizeof(struct tstrHostIFmsg));
 	if(s32Error){
 		PRINT_ER("Failed to send get host channel param's message queue ");
 		return WILC_FAIL;
 	}	
 	return s32Error;
 }
+
+signed int host_int_set_wowlan_trigger(struct WFIDrvHandle *hWFIDrv, u8 wowlan_trigger)
+{
+	signed int s32Error = WILC_SUCCESS;
+	struct WILC_WFIDrv * pstrWFIDrv = (struct WILC_WFIDrv *)hWFIDrv;
+	struct tstrHostIFmsg strHostIFmsg;
+
+	if(pstrWFIDrv == NULL)
+	{
+		WILC_ERRORREPORT(s32Error,WILC_INVALID_ARGUMENT);
+	}
+
+	/* prepare the trigger Message */
+	memset(&strHostIFmsg, 0, sizeof(struct tstrHostIFmsg));
+
+	strHostIFmsg.u16MsgId = HOST_IF_MSG_SET_WOWLAN_TRIGGER;
+	strHostIFmsg.uniHostIFmsgBody.strHostIFWowlanTrigger.u8WowlanTrigger = wowlan_trigger;
+	strHostIFmsg.drvHandler=hWFIDrv;
+
+	/* send the message */
+	s32Error = WILC_MsgQueueSend(&gMsgQHostIF, &strHostIFmsg,
+					sizeof(struct tstrHostIFmsg));
+	if(s32Error)
+		PRINT_ER(" Error in sending message queue: wowlan trigger\n");
+
+	WILC_CATCH(s32Error)
+	{
+
+	}
+
+	return s32Error;
+}	
 
