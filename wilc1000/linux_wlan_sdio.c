@@ -1,5 +1,5 @@
 /*
- * Atmel WILC1000 802.11 b/g/n driver
+ * Atmel WILC 802.11 b/g/n driver
  *
  * Copyright (c) 2015 Atmel Corportation
  *
@@ -25,13 +25,14 @@
 #include <linux/mmc/host.h>
 
 #include "linux_wlan_sdio.h"
+extern struct semaphore sdio_probe_sync;
 #define SDIO_MODALIAS "wilc_sdio"
 
 struct wilc_wlan_os_context  g_linux_sdio_os_context;
 struct sdio_func *local_sdio_func = NULL;
-extern int wilc_netdev_init(void);
+static isr_handler_t isr_handler;
 extern int sdio_clear_int(void);
-extern void wilc_handle_isr(void);
+
 extern int sdio_init(struct wilc_wlan_inp *inp);
 extern int sdio_reset(void *pv);
 void chip_wakeup(void);
@@ -51,13 +52,31 @@ static const struct sdio_device_id wilc_sdio_ids[] = {
 	{ }
 };
 
+#ifndef WILC_SDIO_IRQ_GPIO
+enum sdio_host_lock {
+	WILC_SDIO_HOST_NO_TAKEN = 0,
+	WILC_SDIO_HOST_IRQ_TAKEN = 1,
+	WILC_SDIO_HOST_DIS_TAKEN = 2,
+};
+
+static enum sdio_host_lock	sdio_intr_lock = WILC_SDIO_HOST_NO_TAKEN;
+static wait_queue_head_t sdio_intr_waitqueue;
+#endif /* WILC_SDIO_IRQ_GPIO */
 
 static void wilc_sdio_interrupt(struct sdio_func *func)
 {
 #ifndef WILC_SDIO_IRQ_GPIO
+	if (sdio_intr_lock == WILC_SDIO_HOST_DIS_TAKEN)
+		return;
+	sdio_intr_lock = WILC_SDIO_HOST_IRQ_TAKEN;
+
 	sdio_release_host(func);
-	wilc_handle_isr();
+	if (NULL != isr_handler)
+		isr_handler();
 	sdio_claim_host(func);
+
+	sdio_intr_lock = WILC_SDIO_HOST_NO_TAKEN;
+	wake_up_interruptible(&sdio_intr_waitqueue);
 #endif /* WILC_SDIO_IRQ_GPIO */
 }
 
@@ -133,13 +152,9 @@ static int linux_sdio_probe(struct sdio_func *func,
 {
 	PRINT_D(INIT_DBG, "probe function\n");
 
-	PRINT_D(INIT_DBG,"Initializing netdev\n");
 	local_sdio_func = func;
-	if(wilc_netdev_init()){
-		PRINT_ER("Couldn't initialize netdev\n");
-		return -1;
-	}
 
+	up(&sdio_probe_sync);
 
 	return 0;
 }
@@ -151,7 +166,18 @@ static void linux_sdio_remove(struct sdio_func *func)
 static int wilc_sdio_suspend(struct device *dev)
 {
 	printk("\n\n << SUSPEND >>\n\n");
+
+	if((g_linux_sdio_os_context.hif_critical_section) != NULL)
+		mutex_lock((struct mutex*)(g_linux_sdio_os_context.hif_critical_section));
+
 	chip_wakeup();
+
+	if((g_linux_sdio_os_context.hif_critical_section)!= NULL){
+		if (mutex_is_locked((struct mutex*)(g_linux_sdio_os_context.hif_critical_section))){
+			mutex_unlock((struct mutex*)(g_linux_sdio_os_context.hif_critical_section));
+		}
+	}
+	
 	/*if there is no events , put the chip in low power mode */
 	if(u8ResumeOnEvent == 0)
 		chip_sleep_manually(0xffffffff);
@@ -176,7 +202,7 @@ static int wilc_sdio_resume(struct device *dev)
 	sdio_release_host(local_sdio_func);
 	/*wake the chip to compelete the re-intialization*/
 	chip_wakeup();
-	printk("\n\n << RESUME >>\n\n");	
+	printk("\n\n  <<RESUME>> \n\n");	
 	/*Init SDIO block mode*/
 	sdio_init(NULL);
 
@@ -190,9 +216,18 @@ static int wilc_sdio_resume(struct device *dev)
 	if(u8ResumeOnEvent == 1)
 		host_wakeup_notify();
 
+	if((g_linux_sdio_os_context.hif_critical_section) != NULL)
+		mutex_lock((struct mutex*)(g_linux_sdio_os_context.hif_critical_section));
+	
 	chip_allow_sleep();
-    return 0;
 
+	if((g_linux_sdio_os_context.hif_critical_section)!= NULL){
+		if (mutex_is_locked((struct mutex*)(g_linux_sdio_os_context.hif_critical_section))){
+			mutex_unlock((struct mutex*)(g_linux_sdio_os_context.hif_critical_section));
+		}
+	}
+
+	return 0;
 }
 
 static const struct dev_pm_ops wilc_sdio_pm_ops = {	
@@ -211,10 +246,14 @@ struct sdio_driver wilc_bus = {
                }
 };
 
-int enable_sdio_interrupt(void)
+int enable_sdio_interrupt(isr_handler_t p_isr_handler)
 {
 	int ret = 0;
 #ifndef WILC_SDIO_IRQ_GPIO
+	sdio_intr_lock  = WILC_SDIO_HOST_NO_TAKEN;
+
+	isr_handler = p_isr_handler;
+
 	sdio_claim_host(local_sdio_func);
 	ret = sdio_claim_irq(local_sdio_func, wilc_sdio_interrupt);
 	sdio_release_host(local_sdio_func);
@@ -232,6 +271,10 @@ void disable_sdio_interrupt(void)
 #ifndef WILC_SDIO_IRQ_GPIO
 	int ret;
 
+	if (sdio_intr_lock  == WILC_SDIO_HOST_IRQ_TAKEN)
+		wait_event_interruptible(sdio_intr_waitqueue,
+				   sdio_intr_lock == WILC_SDIO_HOST_NO_TAKEN);
+	sdio_intr_lock  = WILC_SDIO_HOST_DIS_TAKEN;
 
 	sdio_claim_host(local_sdio_func);
 	ret = sdio_release_irq(local_sdio_func);
@@ -239,6 +282,7 @@ void disable_sdio_interrupt(void)
 		PRINT_ER("can't release sdio_irq, err(%d)\n", ret);
 
 	sdio_release_host(local_sdio_func);
+	sdio_intr_lock  = WILC_SDIO_HOST_NO_TAKEN;
 #endif /* WILC_SDIO_IRQ_GPIO */
 }
 
@@ -246,6 +290,9 @@ int linux_sdio_init(void *pv)
 {
 	PRINT_D(INIT_DBG, "SDIO speed: %d\n", 
 		local_sdio_func->card->host->ios.clock);
+#ifndef WILC_SDIO_IRQ_GPIO
+	init_waitqueue_head(&sdio_intr_waitqueue);
+#endif /* WILC_SDIO_IRQ_GPIO */
 	memcpy(&g_linux_sdio_os_context,(struct wilc_wlan_os_context*) pv,sizeof(struct wilc_wlan_os_context));
 	return 1;
 }

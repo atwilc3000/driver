@@ -1,5 +1,5 @@
 /*
- * Atmel WILC1000 802.11 b/g/n driver
+ * Atmel WILC 802.11 b/g/n driver
  *
  * Copyright (c) 2015 Atmel Corportation
  *
@@ -72,7 +72,6 @@ void chip_sleep_manually(u32 u32SleepTime);
  * Register Defines
  */
 #define WILC_PERIPH_REG_BASE		0x1000
-#define WILC_CHANGING_VIR_IF                     (0x108c)
 #define WILC_CHIPID			(WILC_PERIPH_REG_BASE)
 #define WILC_GLB_RESET_0		(WILC_PERIPH_REG_BASE + 0x400)
 #define WILC_PIN_MUX_0			(WILC_PERIPH_REG_BASE + 0x408)
@@ -126,18 +125,14 @@ void chip_sleep_manually(u32 u32SleepTime);
 #define rHAVE_SDIO_IRQ_GPIO_BIT		(0)
 #define rHAVE_SLEEP_CLK_SRC_RTC_BIT	(2)
 #define rHAVE_SLEEP_CLK_SRC_XO_BIT	(3)
-#define rHAVE_LEGACY_RF_SETTINGS_BIT	(5)
 #define rHAVE_DISABLE_WILC_UART_BIT 	(7)
-#define rHAVE_USE_IRQ_AS_HOST_WAKE   	(8)
 #define rHAVE_ANT_SWTCH_SNGL_GPIO_CTRL_BIT	(9)
 #define rHAVE_ANT_SWTCH_DUAL_GPIO_CTRL_BIT	(10)
 
 #define WILC_HAVE_SDIO_IRQ_GPIO		(1 << rHAVE_SDIO_IRQ_GPIO_BIT)
 #define WILC_HAVE_SLEEP_CLK_SRC_RTC	(1 << rHAVE_SLEEP_CLK_SRC_RTC_BIT)
 #define WILC_HAVE_SLEEP_CLK_SRC_XO	(1 << rHAVE_SLEEP_CLK_SRC_XO_BIT)
-#define WILC_HAVE_LEGACY_RF_SETTINGS  	(1 << rHAVE_LEGACY_RF_SETTINGS_BIT)
 #define WILC_HAVE_DISABLE_WILC_UART   	(1 << rHAVE_DISABLE_WILC_UART_BIT)
-#define WILC_HAVE_USE_IRQ_AS_HOST_WAKE  (1 << rHAVE_USE_IRQ_AS_HOST_WAKE)
 #define WILC_HAVE_ANT_SWTCH_SNGL_GPIO_CTRL (1 << rHAVE_ANT_SWTCH_SNGL_GPIO_CTRL_BIT)
 #define WILC_HAVE_ANT_SWTCH_DUAL_GPIO_CTRL (1 << rHAVE_ANT_SWTCH_DUAL_GPIO_CTRL_BIT)
 
@@ -147,12 +142,18 @@ void chip_sleep_manually(u32 u32SleepTime);
 	#define WILC_CLK_STATUS_REG                 0xF1
 	#define WILC_CLK_STATUS_BIT                 BIT0
 	#define WILC_FROM_INTERFACE_TO_WF_REG       0xFA
+	#define WILC_FROM_INTERFACE_TO_WF_BIT		BIT0
+	#define WILC_TO_INTERFACE_FROM_WF_REG		0xFC
+	#define WILC_TO_INTERFACE_FROM_WF_BIT		BIT0 
 #else
     #define WILC_WAKEUP_REG                     0x01
 	#define WILC_WAKEUP_BIT                     BIT1
     #define WILC_CLK_STATUS_REG                 0x0f
     #define WILC_CLK_STATUS_BIT                 BIT2
 	#define WILC_FROM_INTERFACE_TO_WF_REG       0x0B
+	#define WILC_FROM_INTERFACE_TO_WF_BIT		BIT0
+	#define WILC_TO_INTERFACE_FROM_WF_REG		0x10
+	#define WILC_TO_INTERFACE_FROM_WF_BIT		BIT0
 #endif /* WILC_SDIO */
 
 /*
@@ -224,9 +225,8 @@ void chip_sleep_manually(u32 u32SleepTime);
 
 #define DATA_INT_EXT		INT_0
 #define PLL_INT_EXT		INT_1
-#define SLEEP_INT_EXT	INT_2
-#define ALL_INT_EXT     (DATA_INT_EXT|PLL_INT_EXT|SLEEP_INT_EXT)
-#define NUM_INT_EXT     (3)
+#define ALL_INT_EXT		(DATA_INT_EXT | PLL_INT_EXT)
+#define NUM_INT_EXT		(2)
 
 #define DATA_INT_CLR		CLR_INT0
 #define PLL_INT_CLR		CLR_INT1
@@ -278,6 +278,7 @@ struct wilc_hif_func{
 	int (*hif_block_tx_ext)(uint32_t, uint8_t *, uint32_t);	
 	int (*hif_block_rx_ext)(uint32_t, uint8_t *, uint32_t);	
 	int (*hif_sync_ext)(int);	
+	int (*hif_reset)(void);
 };
 
 /*

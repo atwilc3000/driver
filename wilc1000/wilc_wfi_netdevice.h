@@ -1,5 +1,5 @@
 /*
- * Atmel WILC1000 802.11 b/g/n driver
+ * Atmel WILC 802.11 b/g/n driver
  *
  * Copyright (c) 2015 Atmel Corportation
  *
@@ -97,7 +97,7 @@ struct WILC_WFI_stats {
  * LPC3131 which is important to get the MAC start status when you are blocked
  * inside linux_wlan_firmware_download() which blocks mac_open().
  */
-#define RX_BH_TYPE		RX_BH_THREADED_IRQ
+#define RX_BH_TYPE		RX_BH_KTHREAD
 
 struct wilc_wfi_key {
 	u8 *key;
@@ -223,10 +223,10 @@ struct linux_wlan {
 #endif
 	struct semaphore rxq_thread_started;
 	struct semaphore txq_thread_started;
-
-	struct task_struct* rxq_thread;
-	struct task_struct* txq_thread;
-
+	struct semaphore wdt_thread_sem;
+	struct task_struct *rxq_thread;
+	struct task_struct *txq_thread;
+	struct task_struct *wdt_thread;
 	u8 eth_src_address[NUM_CONCURRENT_IFC][6];
 	const struct firmware *wilc_firmware;
 

@@ -1,5 +1,5 @@
 /*
- * Atmel WILC3000 802.11 b/g/n and Bluetooth Combo driver
+ * Atmel WILC 802.11 b/g/n driver
  *
  * Copyright (c) 2015 Atmel Corportation
  *
@@ -166,7 +166,17 @@ static void linux_sdio_remove(struct sdio_func *func)
 static int wilc_sdio_suspend(struct device *dev)
 {
 	printk("\n\n << SUSPEND >>\n\n");
+	if((g_linux_sdio_os_context.hif_critical_section) != NULL)
+		mutex_lock((struct mutex*)(g_linux_sdio_os_context.hif_critical_section));
+
 	chip_wakeup(0);
+
+	if((g_linux_sdio_os_context.hif_critical_section)!= NULL){
+		if (mutex_is_locked((struct mutex*)(g_linux_sdio_os_context.hif_critical_section))){
+			mutex_unlock((struct mutex*)(g_linux_sdio_os_context.hif_critical_section));
+		}
+	}
+	
 	/*if there is no events , put the chip in low power mode */
 	if(pf_get_u8SuspendOnEvent_value()== 0){
 		/*BugID_5213*/
@@ -182,6 +192,7 @@ static int wilc_sdio_suspend(struct device *dev)
 
 	if((g_linux_sdio_os_context.hif_critical_section) != NULL)
 		mutex_lock((struct mutex*)(g_linux_sdio_os_context.hif_critical_section));
+
 	/*reset SDIO to allow kerenl reintilaization at wake up*/
 	sdio_reset(NULL);
 	/*claim the host to prevent driver SDIO access before resume is called*/
@@ -208,7 +219,17 @@ static int wilc_sdio_resume(struct device *dev)
 	if(pf_get_u8SuspendOnEvent_value()== 1)
 		pf_host_wakeup_notify(0);
 
+	if((g_linux_sdio_os_context.hif_critical_section) != NULL)
+		mutex_lock((struct mutex*)(g_linux_sdio_os_context.hif_critical_section));
+
 	chip_allow_sleep(0);
+
+	if((g_linux_sdio_os_context.hif_critical_section)!= NULL){
+		if (mutex_is_locked((struct mutex*)(g_linux_sdio_os_context.hif_critical_section))){
+			mutex_unlock((struct mutex*)(g_linux_sdio_os_context.hif_critical_section));
+		}
+	}	
+	
     return 0;
 
 }

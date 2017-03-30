@@ -1,5 +1,5 @@
 /*
- * Atmel WILC1000 802.11 b/g/n driver
+ * Atmel WILC 802.11 b/g/n driver
  *
  * Copyright (c) 2015 Atmel Corportation
  *
@@ -3362,18 +3362,15 @@ signed int Handle_GetStatistics(void *drvHandler,
 	strWIDList[u32WidsCount].ps8WidVal = (s8 *)(&(pstrStatistics->u32TxFailureCount));
 	u32WidsCount++;
 
-	s32Error = SendConfigPkt(GET_CFG, strWIDList, u32WidsCount, false, driver_handler_id);
+	s32Error = SendConfigPkt(GET_CFG, strWIDList, u32WidsCount, true, driver_handler_id);
 
 	if (s32Error)
 		PRINT_ER("Failed to send scan paramters config packet\n");
 #ifdef TCP_ENHANCEMENTS
-	if((pstrStatistics->u8LinkSpeed > TCP_ACK_FILTER_LINK_SPEED_THRESH) && (pstrStatistics->u8LinkSpeed != DEFAULT_LINK_SPEED))
-	{
+	if ((pstrStatistics->u8LinkSpeed > TCP_ACK_FILTER_LINK_SPEED_THRESH) && (pstrStatistics->u8LinkSpeed != DEFAULT_LINK_SPEED)) {
 		PRINT_D(HOSTINF_DBG, "Enable TCP filter\n");
 		Enable_TCP_ACK_Filter(true);
-	}
-	else if( pstrStatistics->u8LinkSpeed != DEFAULT_LINK_SPEED)
-	{
+	} else if( pstrStatistics->u8LinkSpeed != DEFAULT_LINK_SPEED) {
 		PRINT_D(HOSTINF_DBG, "Disable TCP filter %d\n",pstrStatistics->u8LinkSpeed);
 		Enable_TCP_ACK_Filter(false);
 	}

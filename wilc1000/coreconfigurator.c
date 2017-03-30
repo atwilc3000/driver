@@ -1,5 +1,5 @@
 /*
- * Atmel WILC1000 802.11 b/g/n driver
+ * Atmel WILC 802.11 b/g/n driver
  *
  * Copyright (c) 2015 Atmel Corportation
  *
@@ -17,7 +17,7 @@
  */
 
 #include "coreconfigurator.h"
-//#include "linux_wlan.h"
+#include "linux_wlan.h"
 
 #define PHY_802_11n
 #define MAX_CFG_PKTLEN		1450
@@ -803,8 +803,8 @@ s32 CoreConfiguratorDeInit(void)
 	return s32Error;
 }
 
+uint32_t cfg_timed_out_cnt = 0;
 
-extern struct wilc_wlan_oup *gpstrWlanOps;
 /*
  * sends certain Configuration Packet based on the input WIDs
  * pstrWIDs using driver config layer
@@ -822,8 +822,12 @@ s32 SendConfigPkt(u8 u8Mode, struct tstrWID *pstrWIDs,
 	if (NULL == gpstrWlanOps) {
 		PRINT_INFO(CORECONFIG_DBG,"Net Dev is still not initialized\n");
 		return 1;
-	}else{
-		PRINT_D(CORECONFIG_DBG,"Net Dev is initialized\n");
+	/*Suspend host interface till recovery is done*/
+	} else if (g_bWaitForRecovery) {
+		PRINT_D(CORECONFIG_DBG, "Host interface is suspended\n");
+		while (g_bWaitForRecovery)
+			msleep(300);
+		PRINT_D(CORECONFIG_DBG, "Host interface is resumed\n");
 	}
 
 	if (NULL == gpstrWlanOps->wlan_cfg_set ||
@@ -867,6 +871,6 @@ s32 SendConfigPkt(u8 u8Mode, struct tstrWID *pstrWIDs,
 			}
 		}
 	}
-
+	cfg_timed_out_cnt = (ret != -1) ? 0 : cfg_timed_out_cnt + 1;
 	return ret;
 }

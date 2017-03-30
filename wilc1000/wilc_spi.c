@@ -1,5 +1,5 @@
 /*
- * Atmel WILC1000 802.11 b/g/n driver
+ * Atmel WILC 802.11 b/g/n driver
  *
  * Copyright (c) 2015 Atmel Corportation
  *
@@ -19,7 +19,6 @@
 #include "wilc_wlan_if.h"
 #include "wilc_wlan.h"
 
-extern unsigned int int_clrd;
 struct wilc_spi {
 	int (*spi_tx)(uint8_t *, uint32_t);
 	int (*spi_rx)(uint8_t *, uint32_t);
@@ -1179,7 +1178,6 @@ static int spi_clear_int(void)
 	}
 	reg &= ~0x1;
 	spi_write_reg(WILC_HOST_RX_CTRL_0, reg);
-		int_clrd++;
 	return 1;
 }
 
@@ -1518,5 +1516,6 @@ struct wilc_hif_func hif_spi = {
 	spi_write,
 	spi_read,
 	spi_sync_ext,
+	spi_reset,
 };
 

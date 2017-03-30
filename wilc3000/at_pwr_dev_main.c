@@ -1,5 +1,5 @@
 /*
- * Atmel WILC3000 802.11 b/g/n and Bluetooth Combo driver
+ * Atmel WILC 802.11 b/g/n driver
  *
  * Copyright (c) 2015 Atmel Corportation
  *
@@ -40,7 +40,7 @@
 #include "linux_wlan_spi.h"
 #endif /* WILC_SDIO */
 
-typedef int (cmd_handler)(int);
+typedef int (cmd_handler)(int, char*);
 
 struct cmd_handle_entry {
 	const char *cmd_str;
@@ -71,12 +71,13 @@ static ssize_t pwr_dev_read(struct file *f, char __user *buf, size_t len,
 static ssize_t pwr_dev_write(struct file *f, const char __user *buff,
 			     size_t len, loff_t *off);
 /* Command handlers */
-static int cmd_handle_bt_download_fw(int source);
-static int cmd_handle_bt_power_up(int source);
-static int cmd_handle_bt_power_down(int source);
-static int cmd_handle_bt_fw_chip_wake_up(int source);
-static int cmd_handle_bt_fw_chip_allow_sleep(int source);
-static int cmd_handle_wilc_review_current_status(int source);
+static int cmd_handle_bt_download_fw(int source, char* param);
+static int cmd_handle_bt_power_up(int source, char* param);
+static int cmd_handle_bt_power_down(int source, char* param);
+static int cmd_handle_bt_fw_chip_wake_up(int source, char* param);
+static int cmd_handle_bt_fw_chip_allow_sleep(int source, char* param);
+static int cmd_handle_wilc_review_current_status(int source, char* param);
+static int cmd_handle_wilc_cca_threshold(int source, char* param);
 
 int wilc_bt_firmware_download(void);
 int wilc_bt_start(void);
@@ -91,6 +92,7 @@ static const struct cmd_handle_entry cmd_table[] = {
 	{"BT_FW_CHIP_WAKEUP", cmd_handle_bt_fw_chip_wake_up},
 	{"BT_FW_CHIP_ALLOW_SLEEP", cmd_handle_bt_fw_chip_allow_sleep},
 	{"WILC_CURRENT_STATUS", cmd_handle_wilc_review_current_status},
+	{"CCA_THRESHOLD", cmd_handle_wilc_cca_threshold},
 	/* Keep the NULL handler at the end of the table */
 	{(const char *) NULL, NULL},
 };
@@ -465,17 +467,21 @@ static ssize_t pwr_dev_write(struct file *f, const char __user *buff,
 			     size_t len, loff_t *off)
 {
 	struct cmd_handle_entry *cmd_entry;
+	char *param = (char*)kmalloc(len+1 ,GFP_ATOMIC);
+	
+	strncpy(param, buff, len);
+	param[len] = '\0';
 
-	PRINT_D(PWRDEV_DBG, "at_pwr_dev: dev_write size %d\n", len);
 	if (len > 0) {
-		PRINT_D(PWRDEV_DBG, "received %s\n", buff);
-
+		PRINT_D(PWRDEV_DBG, "received %s, len %d\n", param, len);
 		/* call the appropriate command handler */
 		cmd_entry = (struct cmd_handle_entry *)cmd_table;
 		while (cmd_entry->handle_cmd != NULL) {
-			if (strncmp(cmd_entry->cmd_str, buff,
+			if (strncmp(cmd_entry->cmd_str, param,
 			    strlen(cmd_entry->cmd_str)) == 0) {
-				cmd_entry->handle_cmd(PWR_DEV_SRC_BT);
+				PRINT_D(PWRDEV_DBG, "param len: %d, string: %s\n", len - strlen(cmd_entry->cmd_str), param);
+				cmd_entry->handle_cmd(PWR_DEV_SRC_BT, param + strlen(cmd_entry->cmd_str));
+				
 				break;
 			}
 			cmd_entry++;
@@ -483,11 +489,12 @@ static ssize_t pwr_dev_write(struct file *f, const char __user *buff,
 	} else {
 		PRINT_D(PWRDEV_DBG, "received invalid size <=0: %d\n", len);
 	}
+	kfree(param);
 	return len;
 }
 
 
-static int cmd_handle_bt_power_up(int source)
+static int cmd_handle_bt_power_up(int source, char* param)
 {
 	int ret;
 	
@@ -502,14 +509,14 @@ static int cmd_handle_bt_power_up(int source)
 }
 
 
-static int cmd_handle_bt_power_down(int source)
+static int cmd_handle_bt_power_down(int source, char* param)
 {	
 	at_pwr_power_down(PWR_DEV_SRC_BT);
 
 	return 0;
 }
 
-static int cmd_handle_bt_download_fw(int source)
+static int cmd_handle_bt_download_fw(int source, char* param)
 {
 	PRINT_D(PWRDEV_DBG, "AT PWR: bt_download_fw\n");
 
@@ -530,7 +537,7 @@ static int cmd_handle_bt_download_fw(int source)
 
 
 
-static int cmd_handle_bt_fw_chip_wake_up(int source)
+static int cmd_handle_bt_fw_chip_wake_up(int source, char* param)
 {
 	chip_wakeup(source);
 	return 0;
@@ -538,7 +545,7 @@ static int cmd_handle_bt_fw_chip_wake_up(int source)
 
 
 
-static int cmd_handle_bt_fw_chip_allow_sleep(int source)
+static int cmd_handle_bt_fw_chip_allow_sleep(int source, char* param)
 {
 	bt_init_done=1;
 	chip_allow_sleep(source);
@@ -546,11 +553,65 @@ static int cmd_handle_bt_fw_chip_allow_sleep(int source)
 }
 
 
-static int cmd_handle_wilc_review_current_status(int source)
+static int cmd_handle_wilc_review_current_status(int source, char* param)
 {
 	PRINT_D(PWRDEV_DBG, "WILC Devices current status Wifi: %d, BT: %d\n",
 		 pwr_dev.power_status[PWR_DEV_SRC_WIFI],
 		 pwr_dev.power_status[PWR_DEV_SRC_BT]);
+	
+	return 0;
+}
+
+static int cmd_handle_wilc_cca_threshold(int source, char* param)
+{
+	int carrier_thrshold, noise_thrshold;
+	unsigned int carr_thrshold_frac, noise_thrshold_frac, carr_thrshold_int, 
+		noise_thrshold_int, reg;
+	
+	if(param == NULL) {
+		PRINT_ER("Invalid parameter\n");
+		return -1;
+	}
+
+	if(!(pwr_dev.bus_registered[PWR_DEV_SRC_WIFI] || pwr_dev.bus_registered[PWR_DEV_SRC_BT])) {
+		PRINT_ER("Bus not registered\n");
+		return -1;
+	}
+
+	if(sscanf(param, " %d %d", &noise_thrshold, &carrier_thrshold) != 2) {
+		PRINT_ER("Failed to parse input parameters. Usage:\n echo CCA_THRESHOLD "
+			"NOISE_THRESHOLD CARRIER_THRESHOLD > /dev/at_pwr_dev\n"
+			"where threshold values are in dB * 10\ne.g."
+			"echo CCA_THRESHOLD -625 -826 > /dev/at_pwr_dev to set thresholds "
+			"to -62.5 and -82.6\n\n");
+		return -1;
+	}
+	
+	PRINT_D(PWRDEV_DBG, 
+		"Changing CCA noise threshold to %d and carrier thresholds to %d \n",
+		noise_thrshold, carrier_thrshold);
+
+	carr_thrshold_int = carrier_thrshold/10;
+	if(carrier_thrshold < 0)
+		carr_thrshold_frac = (carr_thrshold_int * 10) - carrier_thrshold;
+	else
+		carr_thrshold_frac = carrier_thrshold - (carr_thrshold_int * 10);
+
+	noise_thrshold_int = noise_thrshold/10;
+	if(noise_thrshold < 0)
+		noise_thrshold_frac = (noise_thrshold_int * 10) - noise_thrshold;
+	else
+		noise_thrshold_frac = noise_thrshold - (noise_thrshold_int * 10);
+
+	pwr_dev.hif_func.hif_read_reg(rCCA_CTL_2, &reg);
+	reg &= ~(0x7FF0000);
+	reg |= ((noise_thrshold_frac & 0x7) | ((noise_thrshold_int & 0x1FF) << 3)) << 16;
+	pwr_dev.hif_func.hif_write_reg(rCCA_CTL_2, reg);
+	
+	pwr_dev.hif_func.hif_read_reg(rCCA_CTL_7, &reg);
+	reg &= ~(0x7FF0000);
+	reg |= ((carr_thrshold_frac & 0x7) | ((carr_thrshold_int & 0x1FF) << 3)) << 16;
+	pwr_dev.hif_func.hif_write_reg(rCCA_CTL_7, reg);
 	
 	return 0;
 }

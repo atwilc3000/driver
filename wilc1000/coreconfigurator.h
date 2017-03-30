@@ -1,5 +1,5 @@
 /*
- * Atmel WILC1000 802.11 b/g/n driver
+ * Atmel WILC 802.11 b/g/n driver
  *
  * Copyright (c) 2015 Atmel Corportation
  *
@@ -73,6 +73,8 @@
 #define MAKE_WORD16(lsb, msb) ((((u16)(msb) << 8) & 0xFF00) | (lsb))
 #define MAKE_WORD32(lsw, msw) ((((u32)(msw) << 16) & 0xFFFF0000) \
 			      | (lsw))
+
+extern uint32_t cfg_timed_out_cnt;
 
 /* Frame Type and Subtype Codes (6-bit) */
 enum tenuFrmSubtype {

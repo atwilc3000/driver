@@ -1,5 +1,5 @@
 /*
- * Atmel WILC1000 802.11 b/g/n driver
+ * Atmel WILC 802.11 b/g/n driver
  *
  * Copyright (c) 2015 Atmel Corportation
  *
@@ -45,11 +45,12 @@ struct sdio_cmd53_t {
 	uint32_t block_size;
 };
 
+typedef void (*isr_handler_t)(void);
 int linux_sdio_init(void *);
 void linux_sdio_deinit(void *);
 int linux_sdio_cmd52(struct sdio_cmd52_t *cmd);
 int linux_sdio_cmd53(struct sdio_cmd53_t *cmd);
-int enable_sdio_interrupt(void);
+int enable_sdio_interrupt(isr_handler_t isr_handler);
 void disable_sdio_interrupt(void);
 
 #endif /* LINUX_WLAN_SDIO_H */

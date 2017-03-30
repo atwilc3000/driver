@@ -1,5 +1,5 @@
 /*
- * Atmel WILC1000 802.11 b/g/n driver
+ * Atmel WILC 802.11 b/g/n driver
  *
  * Copyright (c) 2015 Atmel Corportation
  *
@@ -18,9 +18,6 @@
 
 #include "wilc_wfi_cfgoperations.h"
 #include "linux_wlan.h"
-#ifdef WILC_SDIO
-#include "linux_wlan_sdio.h"
-#endif
 
 #define IS_MANAGMEMENT				0x100
 #define IS_MANAGMEMENT_CALLBACK			0x080
@@ -1035,8 +1032,7 @@ static int WILC_WFI_CfgConnect(struct wiphy *wiphy, struct net_device *dev,
 	}
 
 done:
-	if(s32Error != WILC_SUCCESS){
-		PRINT_ER("%s(): Error(%d) \n",__FUNCTION__,s32Error);
+	if (s32Error != WILC_SUCCESS) {
 		s32Error = -ENOENT;
 		connecting = 0;
 	}
@@ -1609,6 +1605,10 @@ static int WILC_WFI_get_station(struct wiphy *wiphy, struct net_device *dev,
 #endif
 	if (nic->iftype == STATION_MODE) {
 		struct tstrStatistics strStatistics;
+		if (!g_linux_wlan->wilc_initialized) {
+			PRINT_D(CFG80211_DBG,"driver not initialized, return error\n");
+			return -EBUSY;
+		}
 		host_int_get_statistics(priv->hWILCWFIDrv, &strStatistics);
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 19, 0)	//0421
 		sinfo->filled |= BIT(NL80211_STA_INFO_SIGNAL) |
@@ -2094,7 +2094,7 @@ void WILC_WFI_p2p_rx(struct net_device *dev, uint8_t *buff, uint32_t size)
 		if (ieee80211_is_action(buff[FRAME_TYPE_ID])) {
 			PRINT_D(GENERIC_DBG, "Rx Action Frame Type: %x %x\n", buff[ACTION_SUBTYPE_ID], buff[P2P_PUB_ACTION_SUBTYPE]);
 
-			if(priv->bCfgScanning == true && jiffies >= pstrWFIDrv->p2p_mgmt_timeout){
+			if (priv->bCfgScanning == true && time_after_eq(jiffies, pstrWFIDrv->p2p_mgmt_timeout)) {
 				PRINT_D(GENERIC_DBG, "Receiving action frames from wrong channels\n");
 				return;
 			}
@@ -2873,7 +2873,6 @@ static int WILC_WFI_start_ap(struct wiphy *wiphy, struct net_device *dev,
 	struct WILC_WFI_priv *priv;
 	struct perInterface_wlan* nic;
 	s32 s32Error = WILC_SUCCESS;
-		
 	nic = netdev_priv(dev);
 	priv = wiphy_priv(wiphy);
 	
@@ -3702,9 +3701,6 @@ struct wireless_dev *WILC_WFI_WiphyRegister(struct net_device *net)
 		   wdev->wiphy->max_scan_ssids, wdev->wiphy->max_scan_ie_len, wdev->wiphy->signal_type,
 		   wdev->wiphy->interface_modes, wdev->iftype);
 
-#ifdef WILC_SDIO
-    set_wiphy_dev(wdev->wiphy, &local_sdio_func->dev);
-#endif
 	/*Register wiphy structure*/
 	s32Error = wiphy_register(wdev->wiphy);
 	if (s32Error) {

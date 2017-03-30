@@ -1,5 +1,5 @@
 /*
- * Atmel WILC1000 802.11 b/g/n driver
+ * Atmel WILC 802.11 b/g/n driver
  *
  * Copyright (c) 2015 Atmel Corportation
  *
@@ -28,7 +28,6 @@
  */
 #define WILC_AP_EXTERNAL_MLME
 #define WILC_P2P
-#define TCP_ENHANCEMENTS
 
 #define N_INIT		0x00000001
 #define N_ERR		0x00000002
@@ -42,6 +41,7 @@
 
 #define CE_TX_BUFFER_SIZE		(64 * 1024)
 #define CE_RX_BUFFER_SIZE		(384 * 1024)
+#define WILC_TX_ERR_NO_BUF		(-2)
 
 /*
  * Wlan Interface Defines
@@ -118,8 +118,6 @@ struct tx_complete_data {
 };
 
 typedef void (*wilc_tx_complete_func_t)(void *, int);
-
-#define WILC_TX_ERR_NO_BUF (-2)
 
 struct wilc_wlan_oup {
 	int (*wlan_firmware_download)(const uint8_t *, uint32_t);
@@ -967,6 +965,6 @@ enum WID_E {
 };
 
 int wilc_wlan_init(struct wilc_wlan_inp *inp, struct wilc_wlan_oup *oup);
-
+void wilc_handle_isr(void);
 uint32_t wilc_get_chipid(uint8_t update);
 #endif

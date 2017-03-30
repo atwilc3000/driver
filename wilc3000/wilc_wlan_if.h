@@ -1,5 +1,5 @@
 /*
- * Atmel WILC3000 802.11 b/g/n and Bluetooth Combo driver
+ * Atmel WILC 802.11 b/g/n driver
  *
  * Copyright (c) 2015 Atmel Corportation
  *
@@ -28,7 +28,6 @@
  */
 #define WILC_AP_EXTERNAL_MLME
 #define WILC_P2P
-#define TCP_ENHANCEMENTS
 
 #define CE_TX_BUFFER_SIZE		(64 * 1024)
 #define CE_RX_BUFFER_SIZE		(384 * 1024)
@@ -900,7 +899,7 @@ enum WID_E {
 	WID_MAX				= 0xFFFF
 };
 
-int at_wlan_init(struct wilc_wlan_inp *inp, struct wilc_wlan_oup *oup);
+int wilc_wlan_init(struct wilc_wlan_inp *inp, struct wilc_wlan_oup *oup);
 void wilc_handle_isr(void);
 uint32_t wilc_get_chipid(uint8_t update);
 #endif

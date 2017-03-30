@@ -1,5 +1,5 @@
 /*
- * Atmel WILC3000 802.11 b/g/n and Bluetooth Combo driver
+ * Atmel WILC 802.11 b/g/n driver
  *
  * Copyright (c) 2015 Atmel Corportation
  *
@@ -128,6 +128,7 @@ struct wilc_hif_func {
 	int (*hif_block_tx_ext)(uint32_t, uint8_t *, uint32_t);
 	int (*hif_block_rx_ext)(uint32_t, uint8_t *, uint32_t);
 	int (*hif_sync_ext)(int);
+	int (*hif_reset)(void);
 };
 
 /*TicketId883*/

@@ -10,23 +10,94 @@
 
 #include "linux_wlan_common.h"
 #include "wilc_wfi_netdevice.h"
+extern struct semaphore spi_probe_sync;
 
 #define USE_SPI_DMA     0
 
 struct wilc_wlan_os_context  g_linux_spi_os_context;
 struct spi_device *wilc_spi_dev;
 
+void chip_wakeup(void);
+void chip_allow_sleep(void);
+void chip_sleep_manually(u32 u32SleepTime);
+void host_wakeup_notify(void);
+void host_sleep_notify(void);
+
+extern uint8_t u8ResumeOnEvent;
+
+
 static int wilc_bus_probe(struct spi_device* spi)
 {
 	PRINT_D(INIT_DBG, "spiModalias: %s, spiMax-Speed: %d\n", 
 		spi->modalias, spi->max_speed_hz);
 	wilc_spi_dev = spi;
-	
+
+	up(&spi_probe_sync);
 	return 0;
 }
 
 static int wilc_bus_remove(struct spi_device *spi)
 {
+	return 0;
+}
+static int wilc_spi_suspend(struct device *dev)
+{
+	printk("\n\n << SUSPEND >>\n\n");
+
+	if((g_linux_spi_os_context.hif_critical_section) != NULL)
+		mutex_lock((struct mutex*)(g_linux_spi_os_context.hif_critical_section));
+
+	chip_wakeup();
+
+	if((g_linux_spi_os_context.hif_critical_section)!= NULL){
+		if (mutex_is_locked((struct mutex*)(g_linux_spi_os_context.hif_critical_section))){
+			mutex_unlock((struct mutex*)(g_linux_spi_os_context.hif_critical_section));
+		}
+	}
+
+	/*if there is no events , put the chip in low power mode */
+	if(u8ResumeOnEvent == 0)
+		chip_sleep_manually(0xffffffff);
+	else
+	{
+		/*notify the chip that host will sleep*/
+		host_sleep_notify();
+		chip_allow_sleep();
+	}
+
+	if((g_linux_spi_os_context.hif_critical_section) != NULL)
+		mutex_lock((struct mutex*)(g_linux_spi_os_context.hif_critical_section));
+
+	return 0 ;
+}
+
+static int wilc_spi_resume(struct device *dev)
+{
+	printk("\n\n  <<RESUME>> \n\n");
+
+	/*wake the chip to compelete the re-intialization*/
+	chip_wakeup();
+
+	if((g_linux_spi_os_context.hif_critical_section)!= NULL){
+		if (mutex_is_locked((struct mutex*)(g_linux_spi_os_context.hif_critical_section))){
+			mutex_unlock((struct mutex*)(g_linux_spi_os_context.hif_critical_section));
+		}
+	}
+
+	/*if there is an event , notify the chip that the host is awake now*/
+	if(u8ResumeOnEvent == 1)
+		host_wakeup_notify();
+
+	if((g_linux_spi_os_context.hif_critical_section) != NULL)
+		mutex_lock((struct mutex*)(g_linux_spi_os_context.hif_critical_section));
+
+	chip_allow_sleep();
+
+	if((g_linux_spi_os_context.hif_critical_section)!= NULL){
+		if (mutex_is_locked((struct mutex*)(g_linux_spi_os_context.hif_critical_section))){
+			mutex_unlock((struct mutex*)(g_linux_spi_os_context.hif_critical_section));
+		}
+	}
 	return 0;
 }
 
@@ -38,12 +109,18 @@ static const struct of_device_id wilc_of_match[] = {
 MODULE_DEVICE_TABLE(of, wilc_of_match);
 #endif
 
+static const struct dev_pm_ops wilc_spi_pm_ops = {	
+     .suspend = wilc_spi_suspend,    
+     .resume    = wilc_spi_resume,
+    	};
+
 struct spi_driver wilc_bus __refdata = {
 	.driver = {
 		.name = MODALIAS,
 #ifdef CONFIG_OF
 		.of_match_table = wilc_of_match,
 #endif
+		.pm = &wilc_spi_pm_ops,
 	},
 	.probe =  wilc_bus_probe,
 	.remove = __exit_p(wilc_bus_remove),
